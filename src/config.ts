@@ -38,7 +38,25 @@ function flag(env: Env, name: string): boolean {
 
 function number(env: Env, name: string, fallback: number): number {
   const raw = env[name];
-  return raw === undefined || raw === "" ? fallback : Number(raw);
+  if (raw === undefined || raw === "") return fallback;
+  const value = Number(raw);
+  // Without this guard a typo yields NaN, which fails silently rather than
+  // loudly: slice(0, NaN) returns nothing, so the tool would process zero
+  // items forever, and "unknown / total > NaN" is always false, so the
+  // circuit breaker would never trip. Both are worse than refusing to start.
+  if (!Number.isFinite(value)) {
+    throw new Error(`${name} must be a number, got "${raw}"`);
+  }
+  return value;
+}
+
+function pattern(env: Env, name: string, fallback: string): RegExp {
+  const raw = env[name] || fallback;
+  try {
+    return new RegExp(raw);
+  } catch {
+    throw new Error(`${name} is not a valid regular expression: ${raw}`);
+  }
 }
 
 export function fromEnv(env: Env): Config {
@@ -49,7 +67,7 @@ export function fromEnv(env: Env): Config {
     maxPerCycle: number(env, "MAX_PER_CYCLE", 20),
     fetchRetries: number(env, "FETCH_RETRIES", 3),
     titleMaxChars: number(env, "TITLE_MAX_CHARS", 120),
-    genericTitlePattern: new RegExp(env["GENERIC_TITLE_PATTERN"] || "^Instagram$"),
+    genericTitlePattern: pattern(env, "GENERIC_TITLE_PATTERN", "^Instagram$"),
     giveUpLabel: env["GIVE_UP_LABEL"] || "instagram-unavailable",
     unknownRatioLimit: number(env, "UNKNOWN_RATIO_LIMIT", 0.5),
     minSampleForBreaker: number(env, "MIN_SAMPLE_FOR_BREAKER", 5),

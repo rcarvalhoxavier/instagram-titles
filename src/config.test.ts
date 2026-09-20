@@ -12,8 +12,10 @@ test("defaults match the spec", () => {
   assert.equal(config.titleMaxChars, 120);
   assert.equal(config.giveUpLabel, "instagram-unavailable");
   assert.equal(config.unknownRatioLimit, 0.5);
+  assert.equal(config.minSampleForBreaker, 5);
   assert.equal(config.retryLabeled, false);
   assert.equal(config.dryRun, false);
+  assert.ok(config.genericTitlePattern.test("Instagram"));
 });
 
 test("missing required values throw with a useful message", () => {
@@ -37,4 +39,13 @@ test("generic title pattern is compiled", () => {
   const { genericTitlePattern } = fromEnv({ ...MINIMAL, GENERIC_TITLE_PATTERN: "^Instagram$" });
   assert.ok(genericTitlePattern.test("Instagram"));
   assert.ok(!genericTitlePattern.test("Instagram is down"));
+});
+
+test("numeric env vars with invalid values throw with the variable name", () => {
+  assert.throws(() => fromEnv({ ...MINIMAL, MAX_PER_CYCLE: "abc" }), /MAX_PER_CYCLE/);
+  assert.throws(() => fromEnv({ ...MINIMAL, UNKNOWN_RATIO_LIMIT: "meio" }), /UNKNOWN_RATIO_LIMIT/);
+});
+
+test("invalid regex patterns throw with the variable name", () => {
+  assert.throws(() => fromEnv({ ...MINIMAL, GENERIC_TITLE_PATTERN: "[" }), /GENERIC_TITLE_PATTERN/);
 });
