@@ -61,3 +61,41 @@ test("a fully blocked cycle writes nothing", async () => {
   assert.deepEqual(library.updates, []);
   assert.deepEqual(library.labelCalls, []);
 });
+
+// A page that classifies as found: an author marker plus a caption block.
+const RESOLVES = `<span class="UsernameText">someone</span>` +
+  `<div class="Caption">a real caption</div>`;
+
+function mixedTransport(): (url: string | URL | Request) => Promise<Response> {
+  // Items whose shortcode starts with OK resolve; the rest look like a block.
+  return async (url) => new Response(
+    String(url).includes("/p/OK") ? RESOLVES : "<html><div class='LoginWall'></div></html>",
+    { status: 200 },
+  );
+}
+
+test("the breaker vetoes the whole batch, including items that did resolve", async () => {
+  // This is the test the previous one only pretended to be. A batch of pure
+  // unknowns writes nothing even with no breaker at all, because the write loop
+  // skips unknowns anyway -- so it could not detect the breaker being deleted.
+  // Here 3 items resolve and 7 do not: 0.7 unknown, over the 0.5 limit. Without
+  // the breaker the 3 resolved items WOULD be written, which is exactly the
+  // damage a soft block must not be allowed to cause.
+  const items: Item[] = [
+    ...Array.from({ length: 3 }, (_, n) => ({
+      id: `ok${n}`, url: `https://www.instagram.com/p/OK${n}/`, title: "Instagram", labels: [],
+    })),
+    ...Array.from({ length: 7 }, (_, n) => ({
+      id: `no${n}`, url: `https://www.instagram.com/p/NO${n}/`, title: "Instagram", labels: [],
+    })),
+  ];
+  const library = new FakeLibrary(items);
+  const stats = await runCycle(library, fromEnv(BASE), {
+    fetchImpl: mixedTransport(), sleep: async () => {},
+  });
+
+  assert.equal(stats.found, 3, "three items must have resolved");
+  assert.equal(stats.unknown, 7, "seven items must be unknown");
+  assert.deepEqual(library.updates, [], "the breaker must veto the resolved items too");
+  assert.deepEqual(library.labelCalls, []);
+});
