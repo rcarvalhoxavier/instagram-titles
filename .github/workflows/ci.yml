@@ -1,0 +1,23 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: npm ci
+      - name: source must be ASCII-only (see Global Constraints)
+        run: |
+          if grep -rP '[^\x00-\x7F]' src scripts; then
+            echo "::error::non-ASCII byte in source; use an escape like \\u00a0 instead"
+            exit 1
+          fi
+      - run: npx tsc --noEmit
+      - run: node --test src/*.test.ts
