@@ -55,7 +55,7 @@ for (const junk of ["", "<html></html>", "garbage"]) {
 }
 
 test("unescapeHtml maps each entity to the right character", () => {
-  // unescapeHtml is exported, so its contract stands on its own — classify
+  // unescapeHtml is exported, so its contract stands on its own: classify
   // happens to fold whitespace afterwards, which masked a wrong &nbsp; once.
   assert.equal(unescapeHtml("a&nbsp;b").charCodeAt(1), 0xa0, "&nbsp; must be U+00A0, not a plain space");
   assert.equal(unescapeHtml("&amp;&lt;&gt;&quot;&apos;"), "&<>\"'");
