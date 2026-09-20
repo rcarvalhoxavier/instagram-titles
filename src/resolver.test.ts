@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { classify } from "./resolver.ts";
+import { classify, unescapeHtml } from "./resolver.ts";
 
 const load = (name: string): string =>
   readFileSync(new URL(`../fixtures/${name}.html`, import.meta.url), "utf8");
@@ -16,7 +16,8 @@ test("JSON variant returns author and caption", () => {
 
 test("JSON variant decodes double-escaped unicode", () => {
   // O blob vem escapado DUAS vezes: uma pelo JSON, outra pela string JS que o
-  // embute. Um decode simples deixa "🚀" literal no titulo.
+  // embute. Um decode simples deixa "\ud83d\ude80" literal no titulo, em vez
+  // do foguete decodificado que o teste abaixo exige.
   const result = classify(load("embed_json"));
   if (result.kind !== "found") return assert.fail("expected found");
   assert.ok(result.caption.includes("\u{1F680}"), "rocket must be decoded");
@@ -52,3 +53,12 @@ for (const junk of ["", "<html></html>", "garbage"]) {
     assert.equal(classify(junk).kind, "unknown");
   });
 }
+
+test("unescapeHtml maps each entity to the right character", () => {
+  // unescapeHtml is exported, so its contract stands on its own — classify
+  // happens to fold whitespace afterwards, which masked a wrong &nbsp; once.
+  assert.equal(unescapeHtml("a&nbsp;b").charCodeAt(1), 0xa0, "&nbsp; must be U+00A0, not a plain space");
+  assert.equal(unescapeHtml("&amp;&lt;&gt;&quot;&apos;"), "&<>\"'");
+  assert.equal(unescapeHtml("&#65;&#x42;"), "AB");
+  assert.equal(unescapeHtml("&notanentity;"), "&notanentity;");
+});

@@ -14,7 +14,7 @@ const TAGS = /<[^>]+>/g;
 const WHITESPACE = /\s+/g;
 
 const NAMED_ENTITIES: Readonly<Record<string, string>> = {
-  amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ",
+  amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ",
 };
 
 export function unescapeHtml(text: string): string {
