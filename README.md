@@ -12,9 +12,9 @@ the item actually tells you what it is.
 It does not download media, does not archive content, and does not use any Instagram
 credentials - it only reads the same public embed HTML your browser would get for an
 unauthenticated view of a post. Because of that, it can never resolve private accounts or
-age-restricted posts: those return the same "no author marker" response as a deleted post, and
-this tool has no way to tell the two apart except by leaving them alone. If a post you saved is
-private, expect its title to stay `Instagram` indefinitely; that is intentional, not a bug.
+age-restricted posts. If a post you saved is private, expect its title to stay `Instagram`; that
+is intentional, not a bug. Which of the three states below such a post actually falls into has
+not been tested against a real private account, so this README does not claim one.
 
 ## Requirements
 
@@ -55,12 +55,21 @@ changed, and only then remove the variable (or set it to `false`) to let it writ
 | `MAX_PER_CYCLE` | `20` | Maximum number of items resolved per cycle. |
 | `FETCH_RETRIES` | `3` | Retries per item against the embed endpoint before giving up. |
 | `TITLE_MAX_CHARS` | `120` | Length at which a generated title is truncated at a word boundary. |
-| `GENERIC_TITLE_PATTERN` | `^Instagram$` | Regular expression used to recognise an unfixed title. |
+| `GENERIC_TITLE_PATTERN` | `^Instagram$` | Regular expression used to recognise an unfixed title. See the warning below the table before changing this. |
 | `GIVE_UP_LABEL` | `instagram-unavailable` | Label applied when Instagram confirms a post is gone. |
 | `UNKNOWN_RATIO_LIMIT` | `0.5` | Share of `unknown` results in a cycle above which the circuit breaker trips. |
 | `MIN_SAMPLE_FOR_BREAKER` | `5` | Minimum number of items in a cycle before the breaker can trip. |
 | `RETRY_LABELED` | `false` | When `true`, items already labelled `GIVE_UP_LABEL` are reconsidered. |
 | `DRY_RUN` | `false` | When `true`, logs what would be written but writes nothing. |
+
+### One setting to be careful with
+
+`GENERIC_TITLE_PATTERN` is the sole gate deciding which items get rewritten. The default is
+anchored at both ends, so it matches the exact string `Instagram` and nothing else - not
+`Instagram post`, not `instagram`, and not a title of your own that merely mentions Instagram.
+Loosen it and the tool will overwrite titles you wrote yourself; it cannot tell yours apart from
+one it placed. If you have spent time renaming Instagram saves by hand, that work is protected by
+this pattern and by nothing else.
 
 ## How it decides
 
