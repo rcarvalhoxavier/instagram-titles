@@ -62,3 +62,16 @@ test("unescapeHtml maps each entity to the right character", () => {
   assert.equal(unescapeHtml("&#65;&#x42;"), "AB");
   assert.equal(unescapeHtml("&notanentity;"), "&notanentity;");
 });
+
+test("an author marker that trims to nothing is unknown, not found", () => {
+  // Reachable: the author regex accepts any non-tag characters, including
+  // whitespace only. Letting it through yields the title "@", which is worse
+  // than doing nothing -- it destroys the "Instagram" title that at least names
+  // the source, and it stops matching the selector, so the item can never be
+  // picked up and fixed again.
+  for (const html of [`<span class="UsernameText"> </span>`,
+                      `<span class="UsernameText">\t</span>`,
+                      `<a class="Username" href="x">  </a>`]) {
+    assert.equal(classify(html).kind, "unknown", `${JSON.stringify(html)} must not be found`);
+  }
+});

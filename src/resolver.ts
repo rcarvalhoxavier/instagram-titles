@@ -47,14 +47,25 @@ function captionFromHtml(document: string): string | null {
 
 export function classify(document: string): Result {
   if (BROKEN_MEDIA.test(document)) return { kind: "gone" };
-  const author = USERNAME_TEXT.exec(document) ?? USERNAME_ANY.exec(document);
-  if (author === null) {
+
+  const authorMatch = USERNAME_TEXT.exec(document) ?? USERNAME_ANY.exec(document);
+  if (authorMatch === null) {
     return { kind: "unknown", reason: "no author marker and no broken-media marker" };
   }
+
+  // An author that trims to nothing is not a usable result. Letting it through
+  // would produce the title "@", which is worse than doing nothing: it destroys
+  // the "Instagram" title that at least names the source, and it stops matching
+  // the selector's pattern, so the item never returns to the queue to be fixed.
+  const author = authorMatch[1]!.trim();
+  if (author === "") {
+    return { kind: "unknown", reason: "author marker present but empty" };
+  }
+
   const caption = captionFromJson(document) ?? captionFromHtml(document) ?? "";
   return {
     kind: "found",
-    author: author[1]!.trim(),
+    author,
     caption: caption.replace(WHITESPACE, " ").trim(),
   };
 }
