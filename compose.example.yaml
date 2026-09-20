@@ -1,0 +1,12 @@
+# Add this service to the compose file that already runs your Omnivore stack.
+services:
+  instagram-titles:
+    image: ghcr.io/rcarvalhoxavier/instagram-titles:latest
+    container_name: instagram-titles
+    environment:
+      OMNIVORE_API_URL: http://api:8080/api/graphql
+      OMNIVORE_API_KEY: ${OMNIVORE_API_KEY:?set this in your .env}
+      # Start with DRY_RUN=true for one cycle and read the logs before letting
+      # it write anything to your library.
+      DRY_RUN: "true"
+    restart: unless-stopped
