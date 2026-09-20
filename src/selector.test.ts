@@ -36,3 +36,18 @@ test("labelled item is included when RETRY_LABELED is set", () => {
 test("url without a shortcode is skipped", () => {
   assert.equal(needsFix(item({ url: "https://www.instagram.com/astronautgio/" }), fromEnv(BASE)), false);
 });
+
+test("only an exact title matches, including newline and case variants", () => {
+  // The whole safety boundary rests on an unstated ECMAScript detail: without
+  // the "m" flag, "$" anchors to end-of-string and NOT to a position before a
+  // trailing newline, unlike some other regex flavours. Pin it, because a
+  // single stray "m" flag would start overwriting hand-written titles.
+  const config = fromEnv(BASE);
+  for (const title of ["Instagram ", " Instagram", "instagram", "INSTAGRAM",
+                       "Instagram post", "Instagram\n", "Instagram\nfoo",
+                       "foo\nInstagram", "Instagram\r"]) {
+    assert.equal(needsFix(item({ title }), config), false,
+      `title ${JSON.stringify(title)} must be left alone`);
+  }
+  assert.equal(needsFix(item({ title: "Instagram" }), config), true);
+});
