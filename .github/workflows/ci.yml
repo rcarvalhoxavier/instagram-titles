@@ -4,6 +4,11 @@ on:
     branches: [main]
   pull_request:
 
+# Scoped down rather than inheriting the repository default: nothing in this
+# job writes anywhere, and a public repo should say so explicitly.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -21,3 +26,14 @@ jobs:
           fi
       - run: npx tsc --noEmit
       - run: node --test src/*.test.ts
+      # Build the image on every push, not only at release time. The Dockerfile
+      # is the one part of the project CI would otherwise never exercise, so a
+      # break in it would first surface on the public release path.
+      - name: image must build and refuse to start without configuration
+        run: |
+          docker build -t instagram-titles:ci .
+          set +e
+          docker run --rm instagram-titles:ci
+          status=$?
+          set -e
+          test "$status" -eq 2 || { echo "::error::image exited $status, expected 2"; exit 1; }
