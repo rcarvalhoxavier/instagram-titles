@@ -42,12 +42,13 @@ jobs:
         with:
           images: ghcr.io/rcarvalhoxavier/instagram-titles
           tags: |
-            # Both spellings on purpose. "0.1.0" is the Docker convention and
-            # what the registry page shows; "v0.1.0" is what someone reads off
-            # the GitHub release and tries first. Publishing only one of them
-            # leaves a papercut for whoever pins a version.
+            # One spelling only. The git tag is "v0.1.0" but the image tag is
+            # "0.1.0": that is the Docker convention, what the registry page
+            # shows, and what every other image in a compose file looks like
+            # (node:24, caddy:2-alpine). Publishing "v0.1.0" as well would
+            # double the tag surface to spare one lookup; the READMEs and the
+            # release notes say which spelling to pin instead.
             type=semver,pattern={{version}}
-            type=semver,pattern=v{{version}}
             type=raw,value=latest
       - uses: docker/build-push-action@v7
         with:

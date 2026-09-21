@@ -92,9 +92,10 @@ services:
     restart: unless-stopped
 ```
 
-`:latest` follows every release. To pin a version, use the number without the `v` -
-`ghcr.io/rcarvalhoxavier/instagram-titles:0.1.0` - which is the Docker convention and what the
-registry page lists. Releases from v0.1.1 onward publish the `v`-prefixed spelling as well.
+`:latest` follows every release. To pin a version, use the number **without** the `v` -
+`ghcr.io/rcarvalhoxavier/instagram-titles:0.1.0`. The git tag is `v0.1.0` and the image tag is
+`0.1.0`; that is the Docker convention and the only spelling published, so `:v0.1.0` will not
+resolve.
 
 Two details there are worth explaining.
 
