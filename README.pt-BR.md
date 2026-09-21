@@ -92,6 +92,10 @@ services:
     restart: unless-stopped
 ```
 
+O `:latest` acompanha todo release. Para fixar uma versão, use o número sem o `v` —
+`ghcr.io/rcarvalhoxavier/instagram-titles:0.1.0` — que é a convenção do Docker e o que a página do
+registry lista. A partir da v0.1.1 os releases publicam também a grafia com `v`.
+
 Dois detalhes ali merecem explicação.
 
 O `OMNIVORE_API_URL` aponta para `http://api:8080/api/graphql`, e não para o seu hostname

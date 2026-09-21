@@ -42,7 +42,12 @@ jobs:
         with:
           images: ghcr.io/rcarvalhoxavier/instagram-titles
           tags: |
+            # Both spellings on purpose. "0.1.0" is the Docker convention and
+            # what the registry page shows; "v0.1.0" is what someone reads off
+            # the GitHub release and tries first. Publishing only one of them
+            # leaves a papercut for whoever pins a version.
             type=semver,pattern={{version}}
+            type=semver,pattern=v{{version}}
             type=raw,value=latest
       - uses: docker/build-push-action@v7
         with:

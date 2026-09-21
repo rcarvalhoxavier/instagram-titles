@@ -91,6 +91,10 @@ services:
     restart: unless-stopped
 ```
 
+`:latest` follows every release. To pin a version, use the number without the `v` -
+`ghcr.io/rcarvalhoxavier/instagram-titles:0.1.0` - which is the Docker convention and what the
+registry page lists. Releases from v0.1.1 onward publish the `v`-prefixed spelling as well.
+
 Two details there are worth explaining.
 
 `OMNIVORE_API_URL` points at `http://api:8080/api/graphql`, not at your public hostname. Inside
