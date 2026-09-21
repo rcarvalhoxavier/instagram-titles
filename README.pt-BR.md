@@ -98,10 +98,15 @@ O `OMNIVORE_API_URL` aponta para `http://api:8080/api/graphql`, e não para o se
 público. Dentro da rede do compose a ferramenta fala direto com o serviço `api`, então o tráfego
 nunca sai da máquina e não depende do seu proxy reverso ou túnel estarem no ar.
 
-O `init: true` importa mais do que parece. O Node até instala um handler de `SIGTERM`, mas como
-PID 1 ele não encerra enquanto um timer mantém o event loop vivo — então, sem um processo de init,
-todo `docker compose stop` espera o timeout inteiro e depois mata o contêiner. Medido nesta
-imagem: **11 segundos sem ele, 1 segundo com**.
+O `init: true` está ali para ceifar processos zumbis, que é para o que serve um init. Ele já foi
+necessário por um segundo motivo — o contêiner levava o timeout inteiro para morrer —, mas isso
+agora está resolvido na própria ferramenta, em vez de contornado aqui. A causa era específica e as
+duas explicações óbvias estavam erradas: o Node **instala** sim um handler de `SIGTERM`, e o timer
+pendente **não** era o que mantinha o processo vivo. Sem nenhum listener JavaScript registrado, o
+handler do Node restaura a disposição padrão e re-levanta o sinal contra si mesmo — e sinal com
+disposição padrão é exatamente o que o kernel recusa entregar ao PID 1. O `main.ts` agora registra
+um listener, então o re-levantar nunca acontece. Medido nesta imagem: **11 segundos para parar
+antes, 1 segundo depois, com ou sem init**.
 
 Suba, acompanhe um ciclo, e só então deixe escrever:
 
@@ -142,8 +147,9 @@ Duas regras que a CI cobra, e que vale conhecer antes de mandar um patch:
   para recusá-las antes que cheguem a alguém.
 
 O `scripts/probe-api.ts` é um diagnóstico, não parte da ferramenta. Ele responde duas perguntas
-sobre uma instância real do Omnivore — como a busca dela se comporta, e se o `setLabels`
-substitui ou acrescenta — e restaura tudo que altera:
+sobre uma instância real do Omnivore — como a busca dela se comporta, se o `setLabels` substitui
+ou acrescenta, e se o `updatePage` preserva os campos que não recebe — e restaura tudo que
+altera:
 
 ```bash
 OMNIVORE_API_URL=... OMNIVORE_API_KEY=... node scripts/probe-api.ts
@@ -227,8 +233,8 @@ quieta.
 
 ## Notas
 
-Duas dúvidas do desenho foram resolvidas contra uma instância real do Omnivore, em vez de
-adivinhadas (o `scripts/probe-api.ts` refaz a verificação):
+Três dúvidas do desenho foram resolvidas contra uma instância real do Omnivore, em vez de
+adivinhadas (o `scripts/probe-api.ts` refaz as verificações):
 
 - A busca do Omnivore (`in:all instagram.com`) é uma correspondência de texto contra as páginas
   salvas, e não um filtro estrito por host — ela estreita bem os candidatos, mas ainda pode
@@ -237,6 +243,10 @@ adivinhadas (o `scripts/probe-api.ts` refaz a verificação):
 - O `setLabels` **substitui** o conjunto inteiro de rótulos do item, em vez de acrescentar. É por
   isso que a ferramenta sempre lê os rótulos existentes antes de escrever: escrever rótulos de
   forma ingênua apagaria em silêncio qualquer rótulo que você já tivesse aplicado à mão.
+- O `updatePage` faz o contrário: ele **preserva** os campos que você não envia. A ferramenta manda
+  só título e autor, e a descrição, a data de salvamento e o nome do site do item continuam
+  intactos. Isso foi medido, não suposto, porque o `setLabels` já tinha mostrado que a resposta
+  intuitiva pode ser a errada.
 
 ## Sendo um bom vizinho
 

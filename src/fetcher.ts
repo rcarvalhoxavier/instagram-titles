@@ -14,9 +14,10 @@ const USER_AGENT =
   "instagram-titles/0.1.0 (+https://github.com/rcarvalhoxavier/instagram-titles)";
 
 // A response far larger than a real embed page is either not an embed page or
-// not worth parsing; the regexes are linear on real input but not on every
-// possible input, so the ceiling bounds the work.
-const MAX_BODY_BYTES = 4 * 1024 * 1024;
+// not worth parsing. This bounds the regex work, not the allocation: by the
+// time it is checked the body is already in memory. Counted in UTF-16 code
+// units, which is what String.length returns -- hence CHARS, not BYTES.
+const MAX_BODY_CHARS = 4 * 1024 * 1024;
 
 // Retrying these never helps: the answer will not change on the next attempt.
 const TERMINAL_STATUSES = new Set([400, 401, 403, 404, 410]);
@@ -65,9 +66,16 @@ export async function fetchEmbed(
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
       if (response.status === 200) {
+        // Cheap pre-check when the server declares a size, so an absurd
+        // response is refused before it is read rather than after.
+        const declared = Number(response.headers.get("content-length"));
+        if (Number.isFinite(declared) && declared > MAX_BODY_CHARS) {
+          log(`embed ${shortcode} declared ${declared} bytes; refusing to read it`);
+          return null;
+        }
         const body = await response.text();
-        if (body.length > MAX_BODY_BYTES) {
-          log(`embed ${shortcode} returned ${body.length} bytes; refusing to parse it`);
+        if (body.length > MAX_BODY_CHARS) {
+          log(`embed ${shortcode} returned ${body.length} chars; refusing to parse it`);
           return null;
         }
         return body;
@@ -77,9 +85,10 @@ export async function fetchEmbed(
         return null;
       }
       log(`embed ${shortcode} returned HTTP ${response.status}`);
-      if (response.status === 429) {
-        // Honour the server telling us how long to wait, capped so a hostile
-        // or mistaken header cannot park the cycle indefinitely.
+      // Honour the server telling us how long to wait, capped so a hostile or
+      // mistaken header cannot park the cycle. Skipped on the final attempt,
+      // where sleeping would delay a null we are about to return anyway.
+      if (response.status === 429 && attempt < retries) {
         const after = Number(response.headers.get("retry-after"));
         if (Number.isFinite(after) && after > 0) {
           await sleep(Math.min(after, 60) * 1000);

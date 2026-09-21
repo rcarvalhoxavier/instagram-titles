@@ -15,6 +15,7 @@ const WHITESPACE = /\s+/g;
 
 // Instagram handles: letters, digits, dots and underscores, at most 30 chars.
 const HANDLE = /^[A-Za-z0-9._]{1,30}$/;
+const GRAPHEMES = new Intl.Segmenter("en", { granularity: "grapheme" });
 
 const NAMED_ENTITIES: Readonly<Record<string, string>> = {
   amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: "\u00a0",
@@ -77,7 +78,11 @@ export function classify(document: string): Result {
   // an Instagram handle turns that into unknown -- which writes nothing --
   // instead of a byline full of junk.
   if (!HANDLE.test(author)) {
-    return { kind: "unknown", reason: `author does not look like a handle: "${author.slice(0, 40)}"` };
+    // Sliced by grapheme, not by UTF-16 unit: this string goes into a log
+    // line, and cutting a surrogate pair in half there is the same defect
+    // title.ts uses Intl.Segmenter to avoid.
+    const shown = [...GRAPHEMES.segment(author)].slice(0, 40).map((g) => g.segment).join("");
+    return { kind: "unknown", reason: `author does not look like a handle: "${shown}"` };
   }
 
   const caption = captionFromJson(document) ?? captionFromHtml(document) ?? "";

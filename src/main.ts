@@ -13,6 +13,22 @@ process.on("unhandledRejection", (reason) => {
   errorLog(`unhandled rejection: ${reason instanceof Error ? reason.stack : String(reason)}`);
 });
 
+// Without these, a container stopped by an orchestrator waits out the full
+// timeout and is then killed. The reason is specific and worth stating,
+// because the obvious explanations are both wrong: Node does install a
+// SIGTERM handler, and the pending timer is not what keeps the process
+// alive. With no JS listener, Node's handler restores the default
+// disposition and re-raises the signal at itself -- and *that* is what the
+// kernel discards for PID 1, which never receives a default-disposition
+// signal. Registering a listener means the re-raise never happens.
+// Measured on this image: 11s to stop without these lines, 1s with them.
+for (const signal of ["SIGTERM", "SIGINT"] as const) {
+  process.on(signal, () => {
+    log(`received ${signal}; stopping`);
+    process.exit(0);
+  });
+}
+
 export async function main(env: NodeJS.ProcessEnv = process.env): Promise<number> {
   let config;
   try {

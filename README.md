@@ -97,10 +97,15 @@ Two details there are worth explaining.
 the compose network the tool reaches the `api` service directly, so the traffic never leaves the
 host and does not depend on your reverse proxy or tunnel being up.
 
-`init: true` matters more than it looks. Node does install a `SIGTERM` handler, but as PID 1 it
-does not exit on it while a timer keeps the event loop alive - so without an init process every
-`docker compose stop` waits out the full timeout and then kills the container. Measured on this
-image: **11 seconds without it, 1 second with**.
+`init: true` is there to reap zombie processes, which is what an init is for. It used to be load
+bearing for a second reason - the container took the full stop timeout to die - but that is now
+fixed in the tool itself rather than worked around here. The cause was specific and both obvious
+explanations were wrong: Node *does* install a `SIGTERM` handler, and the pending timer was *not*
+what kept the process alive. With no JavaScript listener registered, Node's handler restores the
+default disposition and re-raises the signal at itself, and a default-disposition signal is
+exactly what the kernel refuses to deliver to PID 1. `main.ts` now registers a listener, so the
+re-raise never happens. Measured on this image: **11 seconds to stop before, 1 second after, with
+or without an init**.
 
 Bring it up, watch one cycle, and only then let it write:
 
@@ -141,8 +146,8 @@ Two rules CI enforces, worth knowing before you send a patch:
   refuse them before they reach anyone.
 
 `scripts/probe-api.ts` is a diagnostic rather than part of the tool. It answers two questions
-about a live Omnivore instance - how its search behaves, and whether `setLabels` replaces or adds
-- and restores anything it changes:
+about a live Omnivore instance - how its search behaves, whether `setLabels` replaces or adds, and
+whether `updatePage` preserves the fields it is not sent - and restores anything it changes:
 
 ```bash
 OMNIVORE_API_URL=... OMNIVORE_API_KEY=... node scripts/probe-api.ts
@@ -225,8 +230,8 @@ library you did not otherwise want touched: it either gets a clear answer, or it
 
 ## Notes
 
-Two design questions were resolved against a live Omnivore instance rather than guessed at
-(`scripts/probe-api.ts` runs this check yourself):
+Three design questions were resolved against a live Omnivore instance rather than guessed at
+(`scripts/probe-api.ts` runs these checks yourself):
 
 - Omnivore's `search` query (`in:all instagram.com`) is a text match against saved pages, not a
   strict host filter - it narrows the candidates well enough to be useful, but it can still
@@ -235,6 +240,10 @@ Two design questions were resolved against a live Omnivore instance rather than 
 - `setLabels` **replaces** an item's full label set rather than adding to it. This is why the
   tool always reads an item's existing labels before writing new ones: writing labels naively
   would silently erase any labels you had already applied by hand.
+- `updatePage` does the opposite: it **preserves** the fields you do not send. The tool sends only
+  a title and a byline, and an item's description, saved date and site name survive untouched.
+  This was measured rather than assumed, because `setLabels` had already shown that the intuitive
+  answer can be the wrong one.
 
 ## Being a good citizen
 
