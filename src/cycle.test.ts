@@ -5,7 +5,8 @@ import { breakerTripped, runCycle, type CycleStats } from "./cycle.ts";
 import type { Item, Library, SearchPage } from "./omnivore.ts";
 
 const BASE = { OMNIVORE_API_URL: "https://keep.example/api/graphql", OMNIVORE_API_KEY: "k" };
-const stats = (found: number, gone: number, unknown: number): CycleStats => ({ found, gone, unknown });
+const stats = (found: number, gone: number, unknown: number): CycleStats =>
+  ({ found, gone, unknown, backoffSeconds: 0 });
 
 test("breaker stays closed on a healthy cycle", () => {
   assert.equal(breakerTripped(stats(9, 1, 0), fromEnv(BASE)), false);
@@ -98,4 +99,42 @@ test("the breaker vetoes the whole batch, including items that did resolve", asy
   assert.equal(stats.unknown, 7, "seven items must be unknown");
   assert.deepEqual(library.updates, [], "the breaker must veto the resolved items too");
   assert.deepEqual(library.labelCalls, []);
+});
+
+test("an item whose fetch throws becomes unknown without ending the cycle", async () => {
+  // Captions are text other people wrote. One surprise in one item must not
+  // skip the other nineteen and then repeat that every cycle forever.
+  const items: Item[] = [
+    { id: "boom", url: "https://www.instagram.com/p/BOOM/", title: "Instagram", labels: [] },
+    { id: "fine", url: "https://www.instagram.com/p/FINE/", title: "Instagram", labels: [] },
+  ];
+  const library = new FakeLibrary(items);
+  const errors: string[] = [];
+  const stats = await runCycle(library, fromEnv(BASE), {
+    fetchImpl: async (url) => {
+      if (String(url).includes("BOOM")) throw new Error("kaboom");
+      return new Response(RESOLVES, { status: 200 });
+    },
+    sleep: async () => {},
+    errorLog: (m) => errors.push(m),
+  });
+
+  assert.equal(stats.found, 1, "the healthy item must still be processed");
+  assert.equal(stats.unknown, 1, "the throwing item becomes unknown, not gone");
+  assert.deepEqual(library.updates, ["fine"]);
+});
+
+test("a gone item is labelled end to end through runCycle", async () => {
+  const items: Item[] = [
+    { id: "vanished", url: "https://www.instagram.com/p/GONE/", title: "Instagram", labels: ["keep"] },
+  ];
+  const library = new FakeLibrary(items);
+  const stats = await runCycle(library, fromEnv(BASE), {
+    fetchImpl: async () => new Response(`<div class="EmbedBrokenMedia"></div>`, { status: 200 }),
+    sleep: async () => {},
+  });
+
+  assert.equal(stats.gone, 1);
+  assert.deepEqual(library.updates, [], "a gone item must never be retitled");
+  assert.deepEqual(library.labelCalls, ["vanished"]);
 });

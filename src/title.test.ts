@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { buildTitle } from "./title.ts";
 
 test("short caption is used verbatim", () => {
-  assert.equal(buildTitle("nasa", "Hello from orbit"), "Hello from orbit");
+  assert.equal(buildTitle("nasa", "Hello from orbit", 120), "Hello from orbit");
 });
 
 test("long caption is truncated at a word boundary", () => {
@@ -13,8 +13,8 @@ test("long caption is truncated at a word boundary", () => {
 });
 
 test("empty caption falls back to the author handle", () => {
-  assert.equal(buildTitle("nasa", ""), "@nasa");
-  assert.equal(buildTitle("nasa", "   "), "@nasa");
+  assert.equal(buildTitle("nasa", "", 120), "@nasa");
+  assert.equal(buildTitle("nasa", "   ", 120), "@nasa");
 });
 
 test("truncation never splits a surrogate pair", () => {
@@ -33,5 +33,5 @@ test("grapheme clusters survive truncation", () => {
 });
 
 test("whitespace is normalised", () => {
-  assert.equal(buildTitle("nasa", "a\n\n  b\tc"), "a b c");
+  assert.equal(buildTitle("nasa", "a\n\n  b\tc", 120), "a b c");
 });

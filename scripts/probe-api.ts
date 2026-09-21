@@ -13,13 +13,13 @@ if (!url || !key) {
   process.exit(2);
 }
 
-async function call(query: string, variables: Record<string, unknown>): Promise<any> {
+async function call(query: string, variables: Record<string, unknown>): Promise<Record<string, any>> {
   const response = await fetch(url!, {
     method: "POST",
     headers: { Authorization: key!, "Content-Type": "application/json" },
     body: JSON.stringify({ query, variables }),
   });
-  return await response.json();
+  return (await response.json()) as Record<string, any>;
 }
 
 const SEARCH = `query S($q:String!,$n:Int!){search(query:$q,first:$n){
@@ -66,14 +66,20 @@ if (!before?.length) {
   process.exit(0);
 }
 
-await call(SET_LABELS, { input: { pageId: itemId, labels: [{ name: "probe-temporary" }] } });
-const after = await labelsOf(itemId);
+// try/finally so the original labels come back even if the comparison throws:
+// this script writes to a real library, and the README promises it restores.
+let after: string[] | null = null;
+try {
+  await call(SET_LABELS, { input: { pageId: itemId, labels: [{ name: "probe-temporary" }] } });
+  after = await labelsOf(itemId);
+} finally {
+  await call(SET_LABELS, { input: { pageId: itemId, labels: before.map((name) => ({ name })) } });
+}
 console.log(`  labels after : ${JSON.stringify(after)}`);
 const lost = before.filter((label) => !(after ?? []).includes(label));
 console.log();
 console.log(lost.length > 0
-  ? "  VERDICT: REPLACE. Read-before-write is mandatory (design risk #1)."
+  ? "  VERDICT: REPLACE. Read-before-write is mandatory."
   : "  VERDICT: ADD. Read-before-write is harmless, keep it anyway.");
 
-await call(SET_LABELS, { input: { pageId: itemId, labels: before.map((name) => ({ name })) } });
 console.log(`  restored to  : ${JSON.stringify(await labelsOf(itemId))}`);

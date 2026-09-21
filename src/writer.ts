@@ -24,6 +24,8 @@ export async function applyGone(
   if (item.labels.includes(config.giveUpLabel)) return;
   // setLabels REPLACES the label set, so send the existing labels back along
   // with ours. Omitting them would silently delete the user's own labels.
+  // Verified against a live instance: applying ["gamma"] to an item holding
+  // ["alpha","beta"] leaves only "gamma".
   const desired = [...item.labels, config.giveUpLabel];
   if (config.dryRun) {
     log(`[dry-run] would label ${item.id} as ${config.giveUpLabel}`);

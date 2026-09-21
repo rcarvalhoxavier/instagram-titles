@@ -11,7 +11,16 @@ export interface CycleStats {
   readonly found: number;
   readonly gone: number;
   readonly unknown: number;
+  /**
+   * Seconds the caller should wait beyond its normal interval before trying
+   * again. Set when the breaker trips: nothing was written, so the same
+   * candidates return next cycle, and retrying them at the usual cadence
+   * would hammer a peer that is already refusing us.
+   */
+  readonly backoffSeconds: number;
 }
+
+export const BREAKER_BACKOFF_SECONDS = 60 * 60;
 
 export const total = (stats: CycleStats): number => stats.found + stats.gone + stats.unknown;
 
@@ -40,7 +49,9 @@ export async function runCycle(
 ): Promise<CycleStats> {
   const { fetchImpl = fetch, sleep = wait, log = () => {}, errorLog = () => {} } = deps;
 
-  const candidates = (await findCandidates(library, config)).slice(0, config.maxPerCycle);
+  // findCandidates already caps at maxPerCycle; slicing again here would just
+  // leave a reader wondering which of the two is authoritative.
+  const candidates = await findCandidates(library, config);
   log(`cycle start: ${candidates.length} candidate(s)`);
 
   const decisions: Array<{ item: Item; result: Result }> = [];
@@ -72,13 +83,20 @@ export async function runCycle(
 
     if (result.kind === "found") found++;
     else if (result.kind === "gone") gone++;
-    else unknown++;
+    else {
+      unknown++;
+      // The reason is the only thing that distinguishes a block from a format
+      // change from a network failure -- the three hypotheses the breaker's
+      // own message asks the operator to tell apart. Computing it and never
+      // printing it made every one of them look identical in the log.
+      log(`${item.id} unknown: ${result.reason}`);
+    }
     decisions.push({ item, result });
 
     if (index < candidates.length - 1) await sleep(PAUSE_BETWEEN_FETCHES_MS);
   }
 
-  const stats: CycleStats = { found, gone, unknown };
+  const stats: CycleStats = { found, gone, unknown, backoffSeconds: 0 };
 
   // Every write happens after the whole cycle is classified, so the breaker can
   // veto the batch. Deciding item-by-item would let damage land before the
@@ -86,14 +104,22 @@ export async function runCycle(
   if (breakerTripped(stats, config)) {
     errorLog(
       `circuit breaker tripped: ${unknown}/${total(stats)} unknown - writing nothing. ` +
-      `Likely a block or an Instagram format change.`,
+      `Likely a block or an Instagram format change. ` +
+      `Backing off for ${BREAKER_BACKOFF_SECONDS}s before the next cycle.`,
     );
-    return stats;
+    return { ...stats, backoffSeconds: BREAKER_BACKOFF_SECONDS };
   }
 
+  // Each write is isolated for the same reason each resolution is: one item
+  // failing must not discard the classification work already done for the
+  // other nineteen, nor waste the cycle's request budget.
   for (const { item, result } of decisions) {
-    if (result.kind === "found") await applyFound(library, item, result, config, log);
-    else if (result.kind === "gone") await applyGone(library, item, config, log);
+    try {
+      if (result.kind === "found") await applyFound(library, item, result, config, log);
+      else if (result.kind === "gone") await applyGone(library, item, config, log);
+    } catch (error) {
+      errorLog(`writing ${item.id} failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   log(`cycle done: ${found} found, ${gone} gone, ${unknown} unknown`);

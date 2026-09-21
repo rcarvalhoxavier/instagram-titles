@@ -1,4 +1,8 @@
-import { REQUEST_TIMEOUT_MS, type Fetcher } from "./fetcher.ts";
+import type { Fetcher } from "./fetcher.ts";
+
+// Its own constant rather than the fetcher's: the Omnivore client has no
+// business depending on the Instagram fetcher for a number.
+const REQUEST_TIMEOUT_MS = 30_000;
 
 export interface Item {
   readonly id: string;
@@ -83,7 +87,11 @@ export class OmnivoreClient implements Library {
       body: JSON.stringify({ query, variables }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
-    if (!response.ok) throw new Error(`Omnivore returned HTTP ${response.status}`);
+    if (!response.ok) {
+      // The body usually says why; discarding it leaves an unactionable log.
+      const body = (await response.text().catch(() => "")).slice(0, 200);
+      throw new Error(`Omnivore returned HTTP ${response.status}${body ? `: ${body}` : ""}`);
+    }
     const payload = (await response.json()) as GraphQLResponse;
     if (payload.errors?.length) {
       throw new Error(
@@ -103,11 +111,14 @@ export class OmnivoreClient implements Library {
 
   async search(query: string, limit: number, after?: string): Promise<SearchPage> {
     const data = (await this.#call(SEARCH, { query, first: limit, after: after ?? null })) as {
-      search: {
+      search?: {
         edges?: ReadonlyArray<{ node: SearchNode }>;
         pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
       };
     };
+    if (data.search === undefined || data.search === null) {
+      throw new Error("Omnivore returned no search result; the query may be malformed");
+    }
     const items = (data.search.edges ?? []).map(({ node }) => ({
       id: node.id,
       url: node.url,
@@ -127,8 +138,7 @@ export class OmnivoreClient implements Library {
    *
    * Verified against a live instance: this mutation REPLACES. Applying
    * ["gamma"] to an item holding ["alpha","beta"] leaves only "gamma". Callers
-   * must therefore pass the full desired set, existing labels included -- see
-   * writer.applyGone, and design risk #1.
+   * must therefore pass the full desired set, existing labels included -- see writer.applyGone.
    *
    * The wire shape is LIST<CreateLabelInput>, so each name has to be wrapped in
    * an object. Sending bare strings is accepted by TypeScript and rejected by

@@ -54,7 +54,7 @@ test("an invalid regex names the variable it came from", () => {
 
 test("missing required values throw with a useful message", () => {
   assert.throws(() => fromEnv({ OMNIVORE_API_KEY: "k" }), /OMNIVORE_API_URL/);
-  assert.throws(() => fromEnv({ OMNIVORE_API_URL: "x" }), /OMNIVORE_API_KEY/);
+  assert.throws(() => fromEnv({ OMNIVORE_API_URL: MINIMAL.OMNIVORE_API_URL }), /OMNIVORE_API_KEY/);
 });
 
 for (const [value, seconds] of [["90s", 90], ["15m", 900], ["2h", 7200], ["600", 600]] as const) {
@@ -86,4 +86,42 @@ test("SCAN_INTERVAL is bounded, not just parseable", () => {
   }
   assert.equal(fromEnv({ ...MINIMAL, SCAN_INTERVAL: "60s" }).scanInterval, 60);
   assert.equal(fromEnv({ ...MINIMAL, SCAN_INTERVAL: "24h" }).scanInterval, 86400);
+});
+
+test("an unrecognised boolean is refused, never read as false", () => {
+  // DRY_RUN is the one setting whose purpose is "do not touch my library
+  // yet". Reading a typo as false would turn the safety switch into a write.
+  for (const bad of ["ture", "y", "sim", "verdadeiro", "2", "nao"]) {
+    assert.throws(() => fromEnv({ ...MINIMAL, DRY_RUN: bad }), /DRY_RUN/,
+      `DRY_RUN=${bad} must be refused`);
+  }
+  assert.equal(fromEnv({ ...MINIMAL, DRY_RUN: "false" }).dryRun, false);
+  assert.equal(fromEnv({ ...MINIMAL, DRY_RUN: "OFF" }).dryRun, false);
+  assert.equal(fromEnv({ ...MINIMAL, DRY_RUN: "yes" }).dryRun, true);
+});
+
+test("the endpoint must be an absolute http or https URL", () => {
+  // "api:8080/api/graphql" is the compose example with the scheme dropped.
+  // Accepting it only defers the failure to an opaque TypeError, once per
+  // cycle, forever.
+  for (const bad of ["api:8080/api/graphql", "not a url", "ftp://host/path", "/api/graphql"]) {
+    assert.throws(() => fromEnv({ ...MINIMAL, OMNIVORE_API_URL: bad }), /OMNIVORE_API_URL/,
+      `${bad} must be refused`);
+  }
+  assert.equal(fromEnv({ ...MINIMAL, OMNIVORE_API_URL: "http://api:8080/api/graphql" }).apiUrl,
+    "http://api:8080/api/graphql");
+});
+
+test("a blank give-up label is refused", () => {
+  assert.throws(() => fromEnv({ ...MINIMAL, GIVE_UP_LABEL: "   " }), /GIVE_UP_LABEL/);
+  assert.equal(fromEnv({ ...MINIMAL, GIVE_UP_LABEL: " keep " }).giveUpLabel, "keep");
+});
+
+test("MAX_PER_CYCLE has a ceiling", () => {
+  assert.throws(() => fromEnv({ ...MINIMAL, MAX_PER_CYCLE: "1e9" }), /MAX_PER_CYCLE/);
+  assert.equal(fromEnv({ ...MINIMAL, MAX_PER_CYCLE: "1000" }).maxPerCycle, 1000);
+});
+
+test("an unparseable duration names the variable", () => {
+  assert.throws(() => fromEnv({ ...MINIMAL, SCAN_INTERVAL: "15M" }), /SCAN_INTERVAL/);
 });

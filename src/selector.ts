@@ -2,8 +2,8 @@ import type { Config } from "./config.ts";
 import { extractShortcode } from "./fetcher.ts";
 import type { Item, Library } from "./omnivore.ts";
 
-// Kept deliberately broad: if the instance's search cannot filter by host, we
-// filter client-side in needsFix anyway. See design risk #3.
+// Deliberately broad. This is a text match, not a host filter, so every
+// result is re-checked by needsFix before anything is touched.
 export const SEARCH_QUERY = "in:all instagram.com";
 
 export function needsFix(item: Item, config: Config): boolean {

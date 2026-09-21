@@ -13,6 +13,9 @@ const CAPTION_USERNAME_LINK = /<a[^>]*class="CaptionUsername"[^>]*>.*?<\/a>/s;
 const TAGS = /<[^>]+>/g;
 const WHITESPACE = /\s+/g;
 
+// Instagram handles: letters, digits, dots and underscores, at most 30 chars.
+const HANDLE = /^[A-Za-z0-9._]{1,30}$/;
+
 const NAMED_ENTITIES: Readonly<Record<string, string>> = {
   amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: "\u00a0",
 };
@@ -44,6 +47,10 @@ function captionFromJson(document: string): string | null {
 }
 
 function captionFromHtml(document: string): string | null {
+  // Cheap guard before the non-greedy scan: if the opening marker is absent
+  // there is nothing to find, and the regex would walk the whole document to
+  // discover that.
+  if (!document.includes('class="Caption"')) return null;
   const match = HTML_CAPTION.exec(document);
   if (match === null) return null;
   return unescapeHtml(match[1]!.replace(CAPTION_USERNAME_LINK, "").replace(TAGS, ""));
@@ -64,6 +71,13 @@ export function classify(document: string): Result {
   const author = authorMatch[1]!.trim();
   if (author === "") {
     return { kind: "unknown", reason: "author marker present but empty" };
+  }
+  // The capture is "anything that is not a tag", so it will happily match a
+  // paragraph of markup if the page shape changes. Requiring it to look like
+  // an Instagram handle turns that into unknown -- which writes nothing --
+  // instead of a byline full of junk.
+  if (!HANDLE.test(author)) {
+    return { kind: "unknown", reason: `author does not look like a handle: "${author.slice(0, 40)}"` };
   }
 
   const caption = captionFromJson(document) ?? captionFromHtml(document) ?? "";

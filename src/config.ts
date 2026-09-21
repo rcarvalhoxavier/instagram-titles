@@ -1,6 +1,7 @@
 const DURATION = /^(\d+)([smh]?)$/;
 const MULTIPLIER: Readonly<Record<string, number>> = { "": 1, s: 1, m: 60, h: 3600 };
 const TRUTHY = new Set(["1", "true", "yes", "on"]);
+const FALSY = new Set(["0", "false", "no", "off"]);
 
 export interface Config {
   readonly apiUrl: string;
@@ -25,6 +26,29 @@ function required(env: Env, name: string): string {
   return value;
 }
 
+function endpoint(env: Env, name: string): string {
+  const raw = required(env, name);
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    // Without this, "api:8080/api/graphql" -- the compose example with the
+    // scheme dropped -- is accepted here and fails later as an opaque
+    // TypeError, once every cycle, forever.
+    throw new Error(`${name} must be an absolute URL, got "${raw}"`);
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`${name} must be http or https, got "${parsed.protocol}"`);
+  }
+  return raw;
+}
+
+function label(env: Env, name: string, fallback: string): string {
+  const raw = (env[name] ?? fallback).trim();
+  if (raw === "") throw new Error(`${name} must not be blank`);
+  return raw;
+}
+
 // A floor of a minute is not arbitrary: below it the tool stops being a
 // periodic janitor and becomes a source of load on both Omnivore and
 // Instagram, which is exactly what the README promises it is not. The ceiling
@@ -34,7 +58,9 @@ const MAX_INTERVAL_SECONDS = 24 * 60 * 60;
 
 export function parseDuration(raw: string): number {
   const match = DURATION.exec(raw.trim());
-  if (match === null) throw new Error(`cannot parse duration "${raw}"; use forms like 30s, 15m, 2h`);
+  if (match === null) {
+    throw new Error(`SCAN_INTERVAL cannot be parsed: "${raw}"; use forms like 90s, 15m, 2h, or a plain number of seconds`);
+  }
   const seconds = Number(match[1]) * (MULTIPLIER[match[2] ?? ""] ?? 1);
   if (seconds < MIN_INTERVAL_SECONDS) {
     throw new Error(`SCAN_INTERVAL must be at least ${MIN_INTERVAL_SECONDS}s, got "${raw}"`);
@@ -46,8 +72,17 @@ export function parseDuration(raw: string): number {
 }
 
 function flag(env: Env, name: string): boolean {
-  const raw = env[name];
-  return raw === undefined || raw === "" ? false : TRUTHY.has(raw.trim().toLowerCase());
+  const raw = env[name]?.trim().toLowerCase();
+  if (raw === undefined || raw === "") return false;
+  if (TRUTHY.has(raw)) return true;
+  if (FALSY.has(raw)) return false;
+  // Anything else is refused rather than read as false. DRY_RUN is the one
+  // setting whose whole purpose is "do not touch my library yet", and a
+  // typo like "ture" silently degrading it to "write" is the worst failure
+  // this tool could have.
+  throw new Error(
+    `${name} must be one of ${[...TRUTHY, ...FALSY].join(", ")}, got "${env[name]}"`,
+  );
 }
 
 interface Bounds {
@@ -95,14 +130,14 @@ function pattern(env: Env, name: string, fallback: string): RegExp {
 
 export function fromEnv(env: Env): Config {
   return {
-    apiUrl: required(env, "OMNIVORE_API_URL"),
+    apiUrl: endpoint(env, "OMNIVORE_API_URL"),
     apiKey: required(env, "OMNIVORE_API_KEY"),
     scanInterval: parseDuration(env["SCAN_INTERVAL"] || "15m"),
-    maxPerCycle: number(env, "MAX_PER_CYCLE", 20, { min: 1, integer: true }),
+    maxPerCycle: number(env, "MAX_PER_CYCLE", 20, { min: 1, max: 1000, integer: true }),
     fetchRetries: number(env, "FETCH_RETRIES", 3, { min: 1, integer: true }),
     titleMaxChars: number(env, "TITLE_MAX_CHARS", 120, { min: 1, integer: true }),
     genericTitlePattern: pattern(env, "GENERIC_TITLE_PATTERN", "^Instagram$"),
-    giveUpLabel: env["GIVE_UP_LABEL"] || "instagram-unavailable",
+    giveUpLabel: label(env, "GIVE_UP_LABEL", "instagram-unavailable"),
     unknownRatioLimit: number(env, "UNKNOWN_RATIO_LIMIT", 0.5, { min: 0, max: 1 }),
     minSampleForBreaker: number(env, "MIN_SAMPLE_FOR_BREAKER", 5, { min: 1, integer: true }),
     retryLabeled: flag(env, "RETRY_LABELED"),

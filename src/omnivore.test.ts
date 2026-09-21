@@ -79,3 +79,30 @@ test("search reports a cursor only when there is another page", async () => {
   assert.equal((await withPage(true, "cursor-2").search("q", 10)).next, "cursor-2");
   assert.equal((await withPage(false, "cursor-2").search("q", 10)).next, null);
 });
+
+test("a rejected mutation inside a 200 throws instead of looking successful", () => {
+  // Omnivore answers a refused write with HTTP 200 and errorCodes inside the
+  // result union, not with a top-level "errors" array. Without this the writer
+  // logs "retitled <id>" for a write that never happened.
+  const client = new OmnivoreClient("https://k.example/api/graphql", "secret", async () =>
+    json({ data: { updatePage: { errorCodes: ["UNAUTHORIZED"] } } }));
+  return assert.rejects(() => client.updatePage("1", "t", "b"), /UNAUTHORIZED/);
+});
+
+test("a successful mutation is not mistaken for a rejection", () => {
+  const client = new OmnivoreClient("https://k.example/api/graphql", "secret", async () =>
+    json({ data: { updatePage: { updatedPage: { id: "1" } } } }));
+  return client.updatePage("1", "t", "b");
+});
+
+test("a non-2xx response reports the status and the body", () => {
+  const client = new OmnivoreClient("https://k.example/api/graphql", "secret", async () =>
+    new Response("upstream exploded", { status: 502 }));
+  return assert.rejects(() => client.search("q", 1), /502.*upstream exploded/s);
+});
+
+test("a search result that is absent reports the API, not a TypeError", () => {
+  const client = new OmnivoreClient("https://k.example/api/graphql", "secret", async () =>
+    json({ data: { search: null } }));
+  return assert.rejects(() => client.search("q", 1), /Omnivore returned no search result/);
+});

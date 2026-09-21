@@ -12,9 +12,9 @@ the item actually tells you what it is.
 ## What it does not do
 
 It does not download media, does not archive content, and does not use any Instagram
-credentials - it only reads the same public embed HTML your browser would get for an
-unauthenticated view of a post. Because of that, it can never resolve private accounts or
-age-restricted posts. If a post you saved is private, expect its title to stay `Instagram`; that
+credentials - it only reads Instagram's public embed endpoint, the same one any site uses to
+show an embedded post, and it identifies itself as `instagram-titles` when it does. Because of
+that, it can never resolve private accounts or age-restricted posts. If a post you saved is private, expect its title to stay `Instagram`; that
 is intentional, not a bug. Which of the three states below such a post actually falls into has
 not been tested against a real private account, so this README does not claim one.
 
@@ -35,19 +35,25 @@ anything into your Omnivore stack. Start with `DRY_RUN=true`, which reads and lo
 writes:
 
 ```bash
-docker run --rm \
+OMNIVORE_API_KEY=$(cat ~/.config/instagram-titles.key) \
+docker run --rm --init \
   -e OMNIVORE_API_URL=https://your-omnivore.example/api/graphql \
-  -e OMNIVORE_API_KEY="$(cat ~/.config/instagram-titles.key)" \
+  -e OMNIVORE_API_KEY \
   -e DRY_RUN=true \
   ghcr.io/rcarvalhoxavier/instagram-titles:latest
 ```
 
+Naming `OMNIVORE_API_KEY` without a value passes it through from the environment, so the key never
+appears in the container's command line where `ps` would show it to every local user. `--init` is
+what makes `Ctrl-C` stop it promptly; the section below explains why.
+
 You get one line per item it would change, showing the title and byline it resolved:
 
 ```
-cycle start: 5 candidate(s)
-[dry-run] would retitle 1f26dba1-... to "3kg de molho de tomate por R$10!! ..." (byline ruimorschel)
-cycle done: 5 found, 0 gone, 0 unknown
+2026-09-21T12:55:13.302Z INFO  starting; interval=900s max_per_cycle=20 dry_run=true
+2026-09-21T12:55:13.600Z INFO  cycle start: 5 candidate(s)
+2026-09-21T12:55:21.940Z INFO  [dry-run] would retitle 1f26dba1-... to "3kg de molho de tomate por R$10!! ..." (byline ruimorschel)
+2026-09-21T12:55:22.100Z INFO  cycle done: 5 found, 0 gone, 0 unknown
 ```
 
 Read those lines. When you are happy with them, drop `DRY_RUN` and run it again to let it write.
@@ -91,9 +97,10 @@ Two details there are worth explaining.
 the compose network the tool reaches the `api` service directly, so the traffic never leaves the
 host and does not depend on your reverse proxy or tunnel being up.
 
-`init: true` matters more than it looks. Without it the process runs as PID 1, where default
-signal handling means it ignores `SIGTERM` - so every `docker compose stop` waits out the full
-timeout and then kills it.
+`init: true` matters more than it looks. Node does install a `SIGTERM` handler, but as PID 1 it
+does not exit on it while a timer keeps the event loop alive - so without an init process every
+`docker compose stop` waits out the full timeout and then kills the container. Measured on this
+image: **11 seconds without it, 1 second with**.
 
 Bring it up, watch one cycle, and only then let it write:
 
@@ -113,7 +120,7 @@ types, and the tests use the runner built into Node.
 ```bash
 git clone https://github.com/rcarvalhoxavier/instagram-titles
 cd instagram-titles
-npm ci             # installs typescript and @types/node, nothing else
+npm ci             # typescript, @types/node, and their two transitive packages
 npm test           # node --test src/*.test.ts
 npm run typecheck  # tsc --noEmit
 ```
@@ -125,7 +132,7 @@ real block has ever been observed to capture.
 
 Two rules CI enforces, worth knowing before you send a patch:
 
-- **`src/` and `scripts/` are pure ASCII.** Write non-ASCII characters as escapes (`"…"`,
+- **`src/` and `scripts/` are pure ASCII.** Write non-ASCII characters as escapes (`"\u2026"`,
   `"\u{1F680}"`), including inside comments. This is not fussiness: an invisible U+00A0 in a
   source file was once silently turned into a plain space when copied, breaking an exported
   function's contract while every test stayed green.
@@ -141,15 +148,36 @@ about a live Omnivore instance - how its search behaves, and whether `setLabels`
 OMNIVORE_API_URL=... OMNIVORE_API_KEY=... node scripts/probe-api.ts
 ```
 
+## How the code is laid out
+
+Nine small modules, each with one job, arranged as a pipeline. If something is broken, this tells
+you which file to open.
+
+| Module | Job |
+| --- | --- |
+| `config.ts` | Reads and validates every setting. Owns every default; nothing else has one. |
+| `selector.ts` | Decides which library items may be touched. The safety boundary. |
+| `fetcher.ts` | The only module that talks to Instagram. URL to HTML, with retries. |
+| `resolver.ts` | Pure. HTML to `found` / `gone` / `unknown`. No network, no clock. |
+| `title.ts` | Pure. Author plus caption to the title string. |
+| `writer.ts` | The only module that writes to your library. |
+| `omnivore.ts` | The GraphQL client, and the `Library` contract the others depend on. |
+| `cycle.ts` | One pass: select, resolve everything, then write - with the breaker in between. |
+| `main.ts` | Configuration, the loop, and the timer. 40 lines. |
+
+A change almost always lands in exactly one of them. **Instagram changed its HTML** is the failure
+this tool exists to survive, and it lands in `resolver.ts` - start there, and read
+`resolver.test.ts` alongside it, since the fixtures show what the two page shapes look like.
+
 ## Configuration
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `OMNIVORE_API_URL` | *(required)* | GraphQL endpoint of your Omnivore instance. |
 | `OMNIVORE_API_KEY` | *(required)* | API key used to authenticate to that endpoint. |
-| `SCAN_INTERVAL` | `15m` | How long to wait between cycles. Accepts forms like `90s`, `15m`, `2h`; must be between 60s and 24h. |
+| `SCAN_INTERVAL` | `15m` | How long to wait between cycles. Accepts `90s`, `15m`, `2h`, or a plain number of seconds; must be between 60s and 24h. |
 | `MAX_PER_CYCLE` | `20` | Maximum number of items resolved per cycle. |
-| `FETCH_RETRIES` | `3` | Retries per item against the embed endpoint before giving up. |
+| `FETCH_RETRIES` | `3` | Total attempts per item against the embed endpoint, not retries after the first. `1` means a single try. |
 | `TITLE_MAX_CHARS` | `120` | Length at which a generated title is truncated at a word boundary. |
 | `GENERIC_TITLE_PATTERN` | `^Instagram$` | Regular expression used to recognise an unfixed title. See the warning below the table before changing this. |
 | `GIVE_UP_LABEL` | `instagram-unavailable` | Label applied when Instagram confirms a post is gone. |
@@ -215,6 +243,12 @@ requests to the embed endpoint all exist for the same reason: so that this tool,
 across however many people run it, does not add up to hammering Instagram's infrastructure.
 Please do not lower these values without a real reason to - the tool has no urgency; your library
 will get fixed a few items at a time, cycle after cycle, without anyone needing to notice.
+
+It also reads from your own Omnivore: up to 20 pages of 100 items per cycle while there is still
+work to find, and nothing once the library is clean. Requests to Instagram carry a 20-second
+timeout and back off two seconds per attempt; if the circuit breaker trips, the next cycle waits a
+full extra hour rather than retrying a peer that is already refusing us.
+
 
 ## Licence
 

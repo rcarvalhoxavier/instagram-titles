@@ -25,7 +25,7 @@ const noSleep = async (): Promise<void> => {};
 
 test("returns the body on success", async () => {
   const fetchImpl = async (): Promise<Response> => new Response("<html>ok</html>", { status: 200 });
-  assert.equal(await fetchEmbed("ABC", { fetchImpl, sleep: noSleep }), "<html>ok</html>");
+  assert.equal(await fetchEmbed("ABC", { retries: 3, fetchImpl, sleep: noSleep }), "<html>ok</html>");
 });
 
 test("retries then succeeds", async () => {
@@ -35,7 +35,7 @@ test("retries then succeeds", async () => {
     if (calls < 3) throw new Error("boom");
     return new Response("<html>ok</html>", { status: 200 });
   };
-  assert.equal(await fetchEmbed("ABC", { fetchImpl, sleep: noSleep }), "<html>ok</html>");
+  assert.equal(await fetchEmbed("ABC", { retries: 3, fetchImpl, sleep: noSleep }), "<html>ok</html>");
   assert.equal(calls, 3);
 });
 

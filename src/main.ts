@@ -7,6 +7,12 @@ const log = (message: string): void => console.log(`${stamp()} INFO  ${message}`
 const errorLog = (message: string): void => console.error(`${stamp()} ERROR ${message}`);
 const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
+// A rejected promise outside the cycle's own try/catch would otherwise end
+// the process without a word about why.
+process.on("unhandledRejection", (reason) => {
+  errorLog(`unhandled rejection: ${reason instanceof Error ? reason.stack : String(reason)}`);
+});
+
 export async function main(env: NodeJS.ProcessEnv = process.env): Promise<number> {
   let config;
   try {
@@ -21,14 +27,16 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<number
   const library = new OmnivoreClient(config.apiUrl, config.apiKey);
 
   for (;;) {
+    let extraWait = 0;
     try {
-      await runCycle(library, config, { log, errorLog });
+      const stats = await runCycle(library, config, { log, errorLog });
+      extraWait = stats.backoffSeconds;
     } catch (error) {
       // A bad cycle must never kill the container: the next one may well
       // succeed, and nothing is written from a failed pass.
       errorLog(`cycle failed: ${error instanceof Error ? error.stack : String(error)}`);
     }
-    await wait(config.scanInterval * 1000);
+    await wait((config.scanInterval + extraWait) * 1000);
   }
 }
 

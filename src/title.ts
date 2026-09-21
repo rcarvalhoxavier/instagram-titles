@@ -2,7 +2,9 @@ const WHITESPACE = /\s+/g;
 export const ELLIPSIS = "\u2026";
 const segmenter = new Intl.Segmenter("en", { granularity: "grapheme" });
 
-export function buildTitle(author: string, caption: string, maxChars = 120): string {
+// No default for maxChars on purpose: config.ts owns every default, and a
+// second copy here would let the two drift apart silently.
+export function buildTitle(author: string, caption: string, maxChars: number): string {
   const text = caption.replace(WHITESPACE, " ").trim();
   if (text === "") return `@${author}`;
 

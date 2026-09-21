@@ -35,7 +35,7 @@ test("found with an empty caption falls back to the handle", async () => {
 });
 
 test("gone preserves existing labels", async () => {
-  // Spec risk #1: setLabels REPLACES the set. Writing only our own label
+  // setLabels REPLACES the set. Writing only our own label
   // would delete the labels the user had already put on the item.
   const library = new FakeLibrary();
   await applyGone(library, item(["keep", "reading"]), fromEnv(BASE));
