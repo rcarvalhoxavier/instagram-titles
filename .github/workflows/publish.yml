@@ -4,7 +4,28 @@ on:
     tags: ["v*"]
 
 jobs:
+  # A tag can point at any commit, including one CI never saw. Without this the
+  # release path is the only path that never runs the checks -- and it is the
+  # one that publishes to :latest, where other people pull from.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: npm ci
+      - name: source must be ASCII-only (see Global Constraints)
+        run: |
+          if grep -rP '[^\x00-\x7F]' src scripts; then
+            echo "::error::non-ASCII byte in source; use an escape like \\u00a0 instead"
+            exit 1
+          fi
+      - run: npx tsc --noEmit
+      - run: node --test src/*.test.ts
+
   image:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
