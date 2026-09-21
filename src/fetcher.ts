@@ -6,10 +6,21 @@ const INSTAGRAM_HOSTS = new Set(["instagram.com", "www.instagram.com", "m.instag
 export const REQUEST_TIMEOUT_MS = 20_000;
 const BACKOFF_STEP_MS = 2_000;
 
-// The embed endpoint refuses a real browser User-Agent and answers a login
-// wall instead, so this cannot be "whatever a browser sends". It identifies
-// the tool honestly rather than impersonating a search crawler: verified to
-// work exactly as well as the Googlebot string it replaced.
+// The embed endpoint serves an app shell, not the embed, to any User-Agent it
+// can parse as a known browser family WITH a version token -- measured across
+// 17 variants: "Chrome/120.0.0.0 Safari/537.36" and "Firefox/121.0" both get
+// the shell, while the same Chrome string with the version removed does not.
+// Everything else, including no User-Agent at all, gets the server-rendered
+// embed. That is a rendering decision rather than an anti-bot one: there is no
+// point sending a JavaScript shell to a client that will not run it.
+//
+// The trap for anyone editing this line is specific: do not append a
+// "Family/version" browser token. "Mozilla/5.0 (compatible; ...)" stays safe;
+// "... Chrome/120.0.0.0 Safari/537.36" does not.
+//
+// Identifying honestly also avoids a risk the Googlebot string this replaced
+// carried: sites commonly verify that claim by reverse DNS and block clients
+// that lie about it.
 const USER_AGENT =
   "instagram-titles/0.1.0 (+https://github.com/rcarvalhoxavier/instagram-titles)";
 

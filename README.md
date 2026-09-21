@@ -245,6 +245,27 @@ Three design questions were resolved against a live Omnivore instance rather tha
   This was measured rather than assumed, because `setLabels` had already shown that the intuitive
   answer can be the wrong one.
 
+### How Instagram decides what to send us
+
+The embed endpoint answers with a JavaScript app shell, not the embed, whenever it can parse the
+`User-Agent` as a known browser family carrying a version - `Chrome/<v> Safari/<v>` and
+`Firefox/<v>` both get the shell. Everything else gets the server-rendered embed, including a
+plain `Mozilla/5.0`, an arbitrary identifier, and no `User-Agent` header at all. Removing just the
+version from an otherwise identical Chrome string flips the response back to the embed, which is
+the signature of a real user-agent parser rather than a substring blocklist.
+
+That reads as a rendering decision rather than an anti-bot one: there is no point sending a
+JavaScript shell to a client that will not run it. It is also why this tool's identifier is safe
+structurally rather than by luck - it carries no versioned browser-family token. If you edit it,
+that is the one thing to avoid.
+
+Measured across 17 variants against one post, from one IP, with one TLS client. The contrast
+within the batch was clean and a control was re-run afterwards to rule out drift, but none of that
+proves the behaviour holds from a different network.
+
+Either way the failure mode is safe by construction: an app shell carries no author marker and no
+broken-media marker, so it lands in `unknown`, the circuit breaker trips, and nothing is written.
+Fragility here costs availability, never correctness.
 ## Being a good citizen
 
 The default 15-minute interval, the per-cycle cap of 20 items, and the 1.5-second pause between

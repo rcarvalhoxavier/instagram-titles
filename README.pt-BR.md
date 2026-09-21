@@ -248,6 +248,28 @@ adivinhadas (o `scripts/probe-api.ts` refaz as verificações):
   intactos. Isso foi medido, não suposto, porque o `setLabels` já tinha mostrado que a resposta
   intuitiva pode ser a errada.
 
+### Como o Instagram decide o que nos mandar
+
+O endpoint de embed responde com um app shell de JavaScript, e não com o embed, sempre que
+consegue interpretar o `User-Agent` como uma família de navegador conhecida **com versão** —
+`Chrome/<v> Safari/<v>` e `Firefox/<v>` recebem o shell. Todo o resto recebe o embed renderizado
+no servidor, inclusive um `Mozilla/5.0` puro, um identificador arbitrário, e nenhum cabeçalho
+`User-Agent`. Remover só a versão de uma string de Chrome no restante idêntica inverte a resposta
+de volta para o embed — que é a assinatura de um parser de user-agent de verdade, e não de uma
+lista de substrings.
+
+Isso se lê como decisão de renderização, não como decisão anti-bot: não adianta mandar um shell de
+JavaScript para um cliente que não vai executá-lo. É também por isso que o identificador desta
+ferramenta é seguro por razão estrutural, e não por sorte — ele não carrega token de família de
+navegador com versão. Se você for editá-lo, é a única coisa a evitar.
+
+Medido em 17 variantes contra um post, de um IP, com um cliente TLS. O contraste dentro da bateria
+foi limpo e um controle foi refeito ao final para descartar deriva, mas nada disso prova que o
+comportamento se mantém de outra rede.
+
+De todo modo o modo de falha é seguro por construção: um app shell não tem marcador de autor nem
+marcador de mídia quebrada, então cai em `unknown`, o disjuntor dispara, e nada é escrito.
+Fragilidade aqui custa disponibilidade, nunca correção.
 ## Sendo um bom vizinho
 
 O intervalo padrão de 15 minutos, o teto de 20 itens por ciclo e a pausa de 1,5 segundo entre
