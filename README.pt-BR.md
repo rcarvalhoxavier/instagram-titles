@@ -76,7 +76,8 @@ DRY_RUN=true npm start
 
 É assim que ela foi pensada para rodar: ao lado do Omnivore, num temporizador, corrigindo em
 silêncio os links novos conforme chegam. Acrescente o serviço abaixo ao `docker-compose.yml` que
-já sobe o seu stack, e ponha `OMNIVORE_API_KEY=...` no mesmo `.env` que esse stack já lê. O bloco
+já sobe o seu stack, e ponha `OMNIVORE_API_KEY=...` no mesmo `.env` que esse stack já lê — com uma ressalva,
+logo abaixo, se os seus serviços usam `env_file`. O bloco
 completo está em [`compose.example.yaml`](compose.example.yaml):
 
 ```yaml
@@ -111,6 +112,32 @@ handler do Node restaura a disposição padrão e re-levanta o sinal contra si m
 disposição padrão é exatamente o que o kernel recusa entregar ao PID 1. O `main.ts` agora registra
 um listener, então o re-levantar nunca acontece. Medido nesta imagem: **11 segundos para parar
 antes, 1 segundo depois, com ou sem init**.
+
+### Se o seu compose usa `env_file`
+
+O bloco acima lê a chave por interpolação: o Compose substitui `${OMNIVORE_API_KEY}` a partir do
+`.env` ao lado do seu arquivo de compose, e só este serviço fica com ela. O compose original do
+Omnivore declara `environment:` serviço a serviço, então com ele nada mais muda e o parágrafo
+acima basta.
+
+Se o seu stack foi adaptado para os serviços carregarem o arquivo inteiro com `env_file: .env`, o
+quadro é outro. O `env_file` injeta *todas* as variáveis do arquivo em *cada* serviço que o lista,
+então pôr a chave lá entrega aos containers `api`, `web` e `queue-processor` uma credencial que
+lê e escreve na sua biblioteca inteira — e o Compose recria cada um deles, porque o ambiente
+mudou.
+
+Nesse caso, dê um arquivo próprio à chave e aponte só este serviço para ele:
+
+```yaml
+    env_file:
+      - .env.instagram-titles
+    environment:
+      OMNIVORE_API_URL: http://api:8080/api/graphql
+```
+
+Medido num stack adaptado assim: com a chave no `.env` compartilhado, o `docker inspect` do
+container `api` listava `OMNIVORE_API_KEY`; depois de movê-la para o arquivo próprio, não listava
+mais.
 
 Suba, acompanhe um ciclo, e só então deixe escrever:
 

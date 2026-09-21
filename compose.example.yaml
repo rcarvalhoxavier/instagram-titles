@@ -6,6 +6,11 @@ services:
     environment:
       OMNIVORE_API_URL: http://api:8080/api/graphql
       OMNIVORE_API_KEY: ${OMNIVORE_API_KEY:?set this in your .env}
+      # Interpolation, not env_file, on purpose. If the services in your
+      # stack load the whole file with `env_file: .env`, the key must NOT
+      # go in that file: env_file hands every variable to every service
+      # that lists it, including api and web. Give it its own file then --
+      # see "If your compose file uses env_file" in the README.
       # Start with DRY_RUN=true for one cycle and read the logs before letting
       # it write anything to your library.
       DRY_RUN: "true"

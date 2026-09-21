@@ -75,7 +75,8 @@ DRY_RUN=true npm start
 
 This is the intended way to run it: alongside Omnivore, on a timer, quietly fixing new saves as
 they arrive. Add the service below to the `docker-compose.yml` that already runs your stack, and
-put `OMNIVORE_API_KEY=...` in the same `.env` that stack already reads. The full block is in
+put `OMNIVORE_API_KEY=...` in the same `.env` that stack already reads - with one caveat
+if your services use `env_file`, described below. The full block is in
 [`compose.example.yaml`](compose.example.yaml):
 
 ```yaml
@@ -110,6 +111,31 @@ default disposition and re-raises the signal at itself, and a default-dispositio
 exactly what the kernel refuses to deliver to PID 1. `main.ts` now registers a listener, so the
 re-raise never happens. Measured on this image: **11 seconds to stop before, 1 second after, with
 or without an init**.
+
+### If your compose file uses `env_file`
+
+The block above reads the key by interpolation: Compose substitutes `${OMNIVORE_API_KEY}` from
+the `.env` beside your compose file, and only this service ends up holding it. The upstream
+Omnivore compose file declares `environment:` service by service, so with it nothing else
+changes and the paragraph above is all you need.
+
+If your stack has been adapted so that services load the whole file with `env_file: .env`, the
+picture is different. `env_file` injects *every* variable in the file into *every* service that
+lists it, so putting the key there hands your `api`, `web` and `queue-processor` containers a
+credential that reads and writes your entire library - and Compose recreates each of them,
+because their environment changed.
+
+Give the key a file of its own in that case, and point only this service at it:
+
+```yaml
+    env_file:
+      - .env.instagram-titles
+    environment:
+      OMNIVORE_API_URL: http://api:8080/api/graphql
+```
+
+Measured on a stack adapted that way: with the key in the shared `.env`, `docker inspect` on the
+`api` container listed `OMNIVORE_API_KEY`; after moving it to its own file, it did not.
 
 Bring it up, watch one cycle, and only then let it write:
 
