@@ -11,5 +11,5 @@
     "test": "node --test src/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
-  "devDependencies": { "typescript": "^7.0.0", "@types/node": "^24.0.0" }
+  "devDependencies": { "typescript": "^7.0.0", "@types/node": "^26.6.1" }
 }
