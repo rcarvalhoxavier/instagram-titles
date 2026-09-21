@@ -1,4 +1,4 @@
-import type { Fetcher } from "./fetcher.ts";
+import { REQUEST_TIMEOUT_MS, type Fetcher } from "./fetcher.ts";
 
 export interface Item {
   readonly id: string;
@@ -7,15 +7,24 @@ export interface Item {
   readonly labels: readonly string[];
 }
 
+export interface SearchPage {
+  readonly items: Item[];
+  /** Cursor for the next page, or null when this was the last one. */
+  readonly next: string | null;
+}
+
 export interface Library {
-  search(query: string, limit: number): Promise<Item[]>;
+  search(query: string, limit: number, after?: string): Promise<SearchPage>;
   updatePage(pageId: string, title: string, byline: string): Promise<void>;
   setLabels(pageId: string, labels: readonly string[]): Promise<void>;
 }
 
-const SEARCH = `query Search($query: String!, $first: Int!) {
-  search(query: $query, first: $first) {
-    ... on SearchSuccess { edges { node { id title url labels { name } } } }
+const SEARCH = `query Search($query: String!, $first: Int!, $after: String) {
+  search(query: $query, first: $first, after: $after) {
+    ... on SearchSuccess {
+      pageInfo { hasNextPage endCursor }
+      edges { node { id title url labels { name } } }
+    }
     ... on SearchError { errorCodes }
   }
 }`;
@@ -46,6 +55,16 @@ interface SearchNode {
   labels: ReadonlyArray<{ name: string }> | null;
 }
 
+function findErrorCodes(data: unknown): string[] | null {
+  if (typeof data !== "object" || data === null) return null;
+  for (const value of Object.values(data as Record<string, unknown>)) {
+    if (typeof value !== "object" || value === null) continue;
+    const codes = (value as { errorCodes?: unknown }).errorCodes;
+    if (Array.isArray(codes) && codes.length > 0) return codes.map(String);
+  }
+  return null;
+}
+
 export class OmnivoreClient implements Library {
   readonly #url: string;
   readonly #key: string;
@@ -62,6 +81,7 @@ export class OmnivoreClient implements Library {
       method: "POST",
       headers: { Authorization: this.#key, "Content-Type": "application/json" },
       body: JSON.stringify({ query, variables }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (!response.ok) throw new Error(`Omnivore returned HTTP ${response.status}`);
     const payload = (await response.json()) as GraphQLResponse;
@@ -70,19 +90,32 @@ export class OmnivoreClient implements Library {
         `GraphQL error: ${payload.errors.map((e) => e.message ?? "?").join("; ")}`,
       );
     }
+    // Omnivore answers a rejected mutation with HTTP 200 and an errorCodes
+    // member of the result union, not with a top-level "errors" array. Without
+    // this check a refused write is logged as a success and the labels or title
+    // silently never change.
+    const failure = findErrorCodes(payload.data);
+    if (failure !== null) {
+      throw new Error(`Omnivore rejected the request: ${failure.join(", ")}`);
+    }
     return payload.data;
   }
 
-  async search(query: string, limit: number): Promise<Item[]> {
-    const data = (await this.#call(SEARCH, { query, first: limit })) as {
-      search: { edges?: ReadonlyArray<{ node: SearchNode }> };
+  async search(query: string, limit: number, after?: string): Promise<SearchPage> {
+    const data = (await this.#call(SEARCH, { query, first: limit, after: after ?? null })) as {
+      search: {
+        edges?: ReadonlyArray<{ node: SearchNode }>;
+        pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
+      };
     };
-    return (data.search.edges ?? []).map(({ node }) => ({
+    const items = (data.search.edges ?? []).map(({ node }) => ({
       id: node.id,
       url: node.url,
       title: node.title ?? "",
       labels: (node.labels ?? []).map((label) => label.name),
     }));
+    const page = data.search.pageInfo;
+    return { items, next: page?.hasNextPage === true ? (page.endCursor ?? null) : null };
   }
 
   async updatePage(pageId: string, title: string, byline: string): Promise<void> {

@@ -15,9 +15,9 @@ test("JSON variant returns author and caption", () => {
 });
 
 test("JSON variant decodes double-escaped unicode", () => {
-  // O blob vem escapado DUAS vezes: uma pelo JSON, outra pela string JS que o
-  // embute. Um decode simples deixa "\ud83d\ude80" literal no titulo, em vez
-  // do foguete decodificado que o teste abaixo exige.
+  // The blob is escaped TWICE: once by the JSON, once by the JS string that
+  // embeds it. A single decode leaves "\ud83d\ude80" literal in the title,
+  // instead of the decoded rocket this test requires.
   const result = classify(load("embed_json"));
   if (result.kind !== "found") return assert.fail("expected found");
   assert.ok(result.caption.includes("\u{1F680}"), "rocket must be decoded");
@@ -43,8 +43,8 @@ test("broken-media marker means gone", () => {
 });
 
 test("no author and no broken marker means unknown", () => {
-  // Invariante central: um bloqueio NAO pode virar Gone, porque Gone escreve
-  // um rotulo permanente na biblioteca do usuario.
+  // Central invariant: a block must NEVER become gone, because gone writes a
+  // permanent label into the user's library.
   assert.equal(classify(load("embed_blocked_synthetic")).kind, "unknown");
 });
 
@@ -74,4 +74,18 @@ test("an author marker that trims to nothing is unknown, not found", () => {
                       `<a class="Username" href="x">  </a>`]) {
     assert.equal(classify(html).kind, "unknown", `${JSON.stringify(html)} must not be found`);
   }
+});
+
+test("an out-of-range numeric entity is left alone, never thrown on", () => {
+  // String.fromCodePoint throws RangeError above 0x10FFFF. A caption is text
+  // someone else wrote, so a throw here would abort the whole cycle and, since
+  // the item is never retitled, it would come back and abort the next one too.
+  const poisoned = `<span class="UsernameText">x</span>` +
+    `<div class="Caption">hi &#1114112; there</div>`;
+  const result = classify(poisoned);
+  assert.equal(result.kind, "found");
+  assert.equal(unescapeHtml("&#1114112;"), "&#1114112;");
+  assert.equal(unescapeHtml("&#x110000;"), "&#x110000;");
+  assert.equal(unescapeHtml("&#-1;"), "&#-1;");
+  assert.equal(unescapeHtml("&#128640;"), "\u{1F680}");
 });

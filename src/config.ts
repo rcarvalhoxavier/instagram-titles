@@ -25,10 +25,24 @@ function required(env: Env, name: string): string {
   return value;
 }
 
+// A floor of a minute is not arbitrary: below it the tool stops being a
+// periodic janitor and becomes a source of load on both Omnivore and
+// Instagram, which is exactly what the README promises it is not. The ceiling
+// keeps the value inside what setTimeout can actually represent.
+const MIN_INTERVAL_SECONDS = 60;
+const MAX_INTERVAL_SECONDS = 24 * 60 * 60;
+
 export function parseDuration(raw: string): number {
   const match = DURATION.exec(raw.trim());
   if (match === null) throw new Error(`cannot parse duration "${raw}"; use forms like 30s, 15m, 2h`);
-  return Number(match[1]) * (MULTIPLIER[match[2] ?? ""] ?? 1);
+  const seconds = Number(match[1]) * (MULTIPLIER[match[2] ?? ""] ?? 1);
+  if (seconds < MIN_INTERVAL_SECONDS) {
+    throw new Error(`SCAN_INTERVAL must be at least ${MIN_INTERVAL_SECONDS}s, got "${raw}"`);
+  }
+  if (seconds > MAX_INTERVAL_SECONDS) {
+    throw new Error(`SCAN_INTERVAL must be at most 24h, got "${raw}"`);
+  }
+  return seconds;
 }
 
 function flag(env: Env, name: string): boolean {

@@ -47,15 +47,28 @@ export async function runCycle(
   let found = 0, gone = 0, unknown = 0;
 
   for (const [index, item] of candidates.entries()) {
-    const shortcode = extractShortcode(item.url);
-    // findCandidates already rejected items without a shortcode.
-    const document = shortcode === null ? null
-      : await fetchEmbed(shortcode, { retries: config.fetchRetries, fetchImpl, sleep, log });
+    // One item must never be able to end the cycle. Captions are text other
+    // people wrote, and anything unexpected in one of them -- or a transport
+    // error we did not anticipate -- would otherwise abort the loop, skip every
+    // remaining item, and come back to abort the next cycle in the same place,
+    // because the item is never retitled and so is selected again.
+    let result: Result;
+    try {
+      // findCandidates rejects items without a shortcode, so this cannot be
+      // null in practice; the check exists to satisfy the type, not to handle
+      // a case, which is why it shares the "could not reach" reason below.
+      const shortcode = extractShortcode(item.url);
+      const document = shortcode === null ? null
+        : await fetchEmbed(shortcode, { retries: config.fetchRetries, fetchImpl, sleep, log });
 
-    // A transport failure is indefinite, so it is Unknown by construction.
-    const result: Result = document === null
-      ? { kind: "unknown", reason: "could not reach the embed endpoint" }
-      : classify(document);
+      // A transport failure is indefinite, so it is Unknown by construction.
+      result = document === null
+        ? { kind: "unknown", reason: "could not reach the embed endpoint" }
+        : classify(document);
+    } catch (error) {
+      errorLog(`resolving ${item.id} threw: ${error instanceof Error ? error.message : String(error)}`);
+      result = { kind: "unknown", reason: "threw while resolving" };
+    }
 
     if (result.kind === "found") found++;
     else if (result.kind === "gone") gone++;

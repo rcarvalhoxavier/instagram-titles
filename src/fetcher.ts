@@ -3,7 +3,9 @@ export type Fetcher = typeof fetch;
 const SHORTCODE = /\/(?:p|reel|reels)\/([A-Za-z0-9_-]+)/;
 const INSTAGRAM_HOSTS = new Set(["instagram.com", "www.instagram.com", "m.instagram.com"]);
 
-export const USER_AGENT =
+export const REQUEST_TIMEOUT_MS = 20_000;
+
+const USER_AGENT =
   "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)";
 
 export function extractShortcode(url: string): string | null {
@@ -42,7 +44,12 @@ export async function fetchEmbed(
   const url = embedUrl(shortcode);
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      const response = await fetchImpl(url, { headers: { "User-Agent": USER_AGENT } });
+      // Without an explicit signal a hanging peer falls back to undici's 300s
+      // default, so one stuck host could stretch a cycle into hours.
+      const response = await fetchImpl(url, {
+        headers: { "User-Agent": USER_AGENT },
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
       if (response.status === 200) return await response.text();
       log(`embed ${shortcode} returned HTTP ${response.status}`);
     } catch (error) {

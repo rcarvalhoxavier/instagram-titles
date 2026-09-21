@@ -101,8 +101,10 @@ library you did not otherwise want touched: it either gets a clear answer, or it
 Two design questions were resolved against a live Omnivore instance rather than guessed at
 (`scripts/probe-api.ts` runs this check yourself):
 
-- Omnivore's `search` query does filter by host, so restricting the search to Instagram links
-  server-side works as expected.
+- Omnivore's `search` query (`in:all instagram.com`) is a text match against saved pages, not a
+  strict host filter - it narrows the candidates well enough to be useful, but it can still
+  return non-Instagram items. That is why the tool re-filters every result client-side
+  (`selector.ts`'s `needsFix`) before treating anything as a candidate.
 - `setLabels` **replaces** an item's full label set rather than adding to it. This is why the
   tool always reads an item's existing labels before writing new ones: writing labels naively
   would silently erase any labels you had already applied by hand.

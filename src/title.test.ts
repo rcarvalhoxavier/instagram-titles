@@ -18,15 +18,13 @@ test("empty caption falls back to the author handle", () => {
 });
 
 test("truncation never splits a surrogate pair", () => {
-  // Dado escolhido para QUEBRAR um slice() cru: com "a" na frente, o corte cai
-  // no meio de um par em metade dos indices possiveis (2,4,6,...). Medido:
-  // rockets puros NAO exercitam o bug, porque 10 unidades UTF-16 sao 5 pares
-  // inteiros. Este teste falha com slice() e passa com Intl.Segmenter.
+  // Data chosen to BREAK a naive slice(): with "a" in front, the cut lands
+  // mid-pair at half the possible indices (2,4,6,...). Measured: pure rockets
+  // do NOT exercise the bug, because 10 UTF-16 units are exactly 5 whole
+  // pairs. This test fails with slice() and passes with Intl.Segmenter.
   const result = buildTitle("nasa", "a" + "\u{1F680}".repeat(20), 10);
-  assert.equal(result.match(/[\uD800-\uDFFF]/g)?.filter((c, i, a) =>
-    a.length % 2 !== 0).length ?? 0, 0);
-  assert.ok(!/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(result), "high surrogate solto");
-  assert.ok(!/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(result), "low surrogate solto");
+  assert.ok(!/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(result), "lone high surrogate");
+  assert.ok(!/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(result), "lone low surrogate");
 });
 
 test("grapheme clusters survive truncation", () => {

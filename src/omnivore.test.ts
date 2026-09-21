@@ -11,9 +11,11 @@ test("search maps edges to items", async () => {
       id: "1", title: "Instagram", url: "https://www.instagram.com/p/AAA/",
       labels: [{ name: "keep" }],
     } }] } } }));
-  assert.deepEqual(await client.search("q", 10), [{
+  const page = await client.search("q", 10);
+  assert.deepEqual(page.items, [{
     id: "1", url: "https://www.instagram.com/p/AAA/", title: "Instagram", labels: ["keep"],
   }]);
+  assert.equal(page.next, null, "no pageInfo means no next page");
 });
 
 test("search tolerates null labels and null title", async () => {
@@ -21,7 +23,7 @@ test("search tolerates null labels and null title", async () => {
     json({ data: { search: { edges: [{ node: {
       id: "1", title: null, url: "https://www.instagram.com/p/AAA/", labels: null,
     } }] } } }));
-  const [item] = await client.search("q", 10);
+  const [item] = (await client.search("q", 10)).items;
   assert.deepEqual(item?.labels, []);
   assert.equal(item?.title, "");
 });
@@ -68,4 +70,12 @@ test("setLabels wraps each name as CreateLabelInput, not a bare string", () => {
       labels: [{ name: "keep" }, { name: "instagram-unavailable" }],
     });
   });
+});
+
+test("search reports a cursor only when there is another page", async () => {
+  const withPage = (hasNextPage: boolean, endCursor: string | null) =>
+    new OmnivoreClient("https://k.example/api/graphql", "secret", async () =>
+      json({ data: { search: { pageInfo: { hasNextPage, endCursor }, edges: [] } } }));
+  assert.equal((await withPage(true, "cursor-2").search("q", 10)).next, "cursor-2");
+  assert.equal((await withPage(false, "cursor-2").search("q", 10)).next, null);
 });

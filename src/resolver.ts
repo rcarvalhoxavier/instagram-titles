@@ -22,7 +22,11 @@ export function unescapeHtml(text: string): string {
     if (entity[0] === "#") {
       const hex = entity[1] === "x" || entity[1] === "X";
       const code = Number.parseInt(hex ? entity.slice(2) : entity.slice(1), hex ? 16 : 10);
-      return Number.isFinite(code) ? String.fromCodePoint(code) : whole;
+      // String.fromCodePoint throws RangeError above 0x10FFFF, and a caption is
+      // attacker-controlled text. Leaving the entity as written is the safe
+      // reading of something that is not a valid code point anyway.
+      if (!Number.isFinite(code) || code < 0 || code > 0x10ffff) return whole;
+      return String.fromCodePoint(code);
     }
     return NAMED_ENTITIES[entity] ?? whole;
   });

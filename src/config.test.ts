@@ -57,7 +57,7 @@ test("missing required values throw with a useful message", () => {
   assert.throws(() => fromEnv({ OMNIVORE_API_URL: "x" }), /OMNIVORE_API_KEY/);
 });
 
-for (const [value, seconds] of [["30s", 30], ["15m", 900], ["2h", 7200], ["600", 600]] as const) {
+for (const [value, seconds] of [["90s", 90], ["15m", 900], ["2h", 7200], ["600", 600]] as const) {
   test(`duration ${value}`, () => {
     assert.equal(fromEnv({ ...MINIMAL, SCAN_INTERVAL: value }).scanInterval, seconds);
   });
@@ -73,4 +73,17 @@ test("generic title pattern is compiled", () => {
   const { genericTitlePattern } = fromEnv({ ...MINIMAL, GENERIC_TITLE_PATTERN: "^Instagram$" });
   assert.ok(genericTitlePattern.test("Instagram"));
   assert.ok(!genericTitlePattern.test("Instagram is down"));
+});
+
+test("SCAN_INTERVAL is bounded, not just parseable", () => {
+  // The floor is what makes the README's "being a good citizen" section true:
+  // below a minute this stops being a periodic janitor and becomes load on
+  // both Omnivore and Instagram. The ceiling keeps the value inside what
+  // setTimeout can represent -- a huge one wraps and fires immediately.
+  for (const bad of ["0", "0s", "1s", "59s", "25h", "2000000h"]) {
+    assert.throws(() => fromEnv({ ...MINIMAL, SCAN_INTERVAL: bad }),
+      /SCAN_INTERVAL/, `SCAN_INTERVAL=${bad} must be refused`);
+  }
+  assert.equal(fromEnv({ ...MINIMAL, SCAN_INTERVAL: "60s" }).scanInterval, 60);
+  assert.equal(fromEnv({ ...MINIMAL, SCAN_INTERVAL: "24h" }).scanInterval, 86400);
 });

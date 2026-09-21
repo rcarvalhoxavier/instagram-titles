@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fromEnv } from "./config.ts";
 import { breakerTripped, runCycle, type CycleStats } from "./cycle.ts";
-import type { Item, Library } from "./omnivore.ts";
+import type { Item, Library, SearchPage } from "./omnivore.ts";
 
 const BASE = { OMNIVORE_API_URL: "https://keep.example/api/graphql", OMNIVORE_API_KEY: "k" };
 const stats = (found: number, gone: number, unknown: number): CycleStats => ({ found, gone, unknown });
@@ -37,7 +37,7 @@ class FakeLibrary implements Library {
   // No parameter properties: that is non-erasable TS syntax, which Node's
   // native type stripping rejects and erasableSyntaxOnly forbids.
   constructor(items: Item[]) { this.#items = items; }
-  async search(): Promise<Item[]> { return this.#items; }
+  async search(): Promise<SearchPage> { return { items: this.#items, next: null }; }
   async updatePage(id: string): Promise<void> { this.updates.push(id); }
   async setLabels(id: string): Promise<void> { this.labelCalls.push(id); }
 }

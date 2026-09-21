@@ -13,9 +13,26 @@ export function needsFix(item: Item, config: Config): boolean {
   return true;
 }
 
+const PAGE_SIZE = 100;
+const MAX_PAGES = 20;
+
 export async function findCandidates(library: Library, config: Config): Promise<Item[]> {
-  // Over-fetch, because the server-side query may match more loosely than
-  // needsFix does; the cap is applied after filtering, by the caller.
-  const found = await library.search(SEARCH_QUERY, config.maxPerCycle * 5);
-  return found.filter((item) => needsFix(item, config));
+  // Items this tool has already fixed keep matching the server-side query, so
+  // on a large library the newest page can be entirely work already done. A
+  // single page would then return nothing while older, still-generic items sat
+  // just out of reach forever. Walk pages until there are enough candidates or
+  // the library runs out, with a page cap so one cycle cannot page endlessly.
+  const candidates: Item[] = [];
+  let after: string | undefined;
+
+  for (let page = 0; page < MAX_PAGES && candidates.length < config.maxPerCycle; page++) {
+    const { items, next } = await library.search(SEARCH_QUERY, PAGE_SIZE, after);
+    for (const item of items) {
+      if (needsFix(item, config)) candidates.push(item);
+    }
+    if (next === null) break;
+    after = next;
+  }
+
+  return candidates.slice(0, config.maxPerCycle);
 }

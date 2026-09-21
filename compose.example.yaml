@@ -9,4 +9,7 @@ services:
       # Start with DRY_RUN=true for one cycle and read the logs before letting
       # it write anything to your library.
       DRY_RUN: "true"
+    # Without an init, the process is PID 1 and ignores SIGTERM, so every
+    # `docker stop` waits the full timeout and then kills it.
+    init: true
     restart: unless-stopped

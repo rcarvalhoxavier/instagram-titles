@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fromEnv } from "./config.ts";
-import type { Item, Library } from "./omnivore.ts";
+import type { Item, Library, SearchPage } from "./omnivore.ts";
 import { applyFound, applyGone } from "./writer.ts";
 
 const BASE = { OMNIVORE_API_URL: "https://keep.example/api/graphql", OMNIVORE_API_KEY: "k" };
@@ -9,7 +9,7 @@ const BASE = { OMNIVORE_API_URL: "https://keep.example/api/graphql", OMNIVORE_AP
 class FakeLibrary implements Library {
   readonly updates: Array<[string, string, string]> = [];
   readonly labelCalls: Array<[string, string[]]> = [];
-  async search(): Promise<Item[]> { return []; }
+  async search(): Promise<SearchPage> { return { items: [], next: null }; }
   async updatePage(id: string, title: string, byline: string): Promise<void> {
     this.updates.push([id, title, byline]);
   }
