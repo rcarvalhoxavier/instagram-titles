@@ -31,15 +31,25 @@ test("breaker threshold is configurable", () => {
   assert.equal(breakerTripped(stats(3, 0, 7), fromEnv({ ...BASE, UNKNOWN_RATIO_LIMIT: "0.9" })), false);
 });
 
+interface Update {
+  readonly id: string;
+  readonly title: string;
+  readonly byline: string;
+}
+
 class FakeLibrary implements Library {
   readonly updates: string[] = [];
+  readonly writes: Update[] = [];
   readonly labelCalls: string[] = [];
   readonly #items: Item[];
   // No parameter properties: that is non-erasable TS syntax, which Node's
   // native type stripping rejects and erasableSyntaxOnly forbids.
   constructor(items: Item[]) { this.#items = items; }
   async search(): Promise<SearchPage> { return { items: this.#items, next: null }; }
-  async updatePage(id: string): Promise<void> { this.updates.push(id); }
+  async updatePage(id: string, title: string, byline: string): Promise<void> {
+    this.updates.push(id);
+    this.writes.push({ id, title, byline });
+  }
   async setLabels(id: string): Promise<void> { this.labelCalls.push(id); }
 }
 
@@ -122,6 +132,36 @@ test("an item whose fetch throws becomes unknown without ending the cycle", asyn
   assert.equal(stats.found, 1, "the healthy item must still be processed");
   assert.equal(stats.unknown, 1, "the throwing item becomes unknown, not gone");
   assert.deepEqual(library.updates, ["fine"]);
+});
+
+// This is the only test in this repo that runs real Instagram HTML through
+// runCycle to the exact title and byline it writes. instagram-caption is
+// pinned to ^0.1.0, so a 0.1.1 is free to change caption extraction again --
+// permitted under 0.x -- and Dependabot will happily open a PR bumping it.
+// Everything else in this suite fakes the library's response with a caption
+// that was already clean, so it cannot see a regression in what the library
+// does to a real HTML-variant post. This test pins the caption fix Fix 1
+// documented: the "View all N comments" chrome must not appear in the
+// title, and a <br> must become a space rather than gluing two lines
+// together. If a future version of the package regressed either defect,
+// this is what would fail.
+test("an HTML-variant post resolves to the exact title and byline instagram-caption promises", async () => {
+  const HTML_VARIANT = `<span class="UsernameText">captionfix</span>` +
+    `<div class="Caption">hello<br>world<div class="CaptionComments">` +
+    `<a href="#">View all 41 comments</a></div></div>`;
+  const items: Item[] = [
+    { id: "html-variant", url: "https://www.instagram.com/p/HTMLV/", title: "Instagram", labels: [] },
+  ];
+  const library = new FakeLibrary(items);
+
+  await runCycle(library, fromEnv(BASE), {
+    fetchImpl: async () => new Response(HTML_VARIANT, { status: 200 }),
+    sleep: async () => {},
+  });
+
+  assert.deepEqual(library.writes, [
+    { id: "html-variant", title: "hello world", byline: "captionfix" },
+  ]);
 });
 
 test("a gone item is labelled end to end through runCycle", async () => {
