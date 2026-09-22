@@ -1,10 +1,11 @@
 # Dependabot keeps two things current here.
 #
-# The npm entry covers the two development dependencies; there are no runtime
-# dependencies to update. The github-actions entry is what makes pinning the
-# workflow actions by moving tag defensible: the tags move, and Dependabot
-# opens the pull request when they do, so the project gets the maintenance
-# without anyone having to remember it.
+# The npm entry covers the two development dependencies and, since the
+# extraction to instagram-caption, one runtime dependency too - Dependabot
+# will open pull requests against it like any other. The github-actions entry
+# is what makes pinning the workflow actions by moving tag defensible: the
+# tags move, and Dependabot opens the pull request when they do, so the
+# project gets the maintenance without anyone having to remember it.
 version: 2
 updates:
   - package-ecosystem: "npm"
