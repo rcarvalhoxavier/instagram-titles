@@ -61,16 +61,21 @@ escrever. Ela continua rodando num laço temporizado, então pare com `Ctrl-C` a
 ciclo terminar — ou acrescente `-e MAX_PER_CYCLE=3` para mexer em poucos itens na primeira vez e
 conferir o resultado à mão.
 
-Se preferir não usar Docker e tiver Node.js 24 ou mais novo, a ferramenta não tem dependência de
-runtime nenhuma:
+Se preferir não usar Docker e tiver Node.js 24 ou mais novo:
 
 ```bash
 git clone https://github.com/rcarvalhoxavier/instagram-titles
 cd instagram-titles
+npm ci --omit=dev
 OMNIVORE_API_URL=https://seu-omnivore.exemplo/api/graphql \
 OMNIVORE_API_KEY="$(cat ~/.config/instagram-titles.key)" \
 DRY_RUN=true npm start
 ```
+
+Ela tem uma dependência de runtime,
+[instagram-caption](https://github.com/rcarvalhoxavier/instagram-caption), que é a parte que
+conversa com o Instagram. Foi extraída desta ferramenta para que outros "leia depois" também
+pudessem usá-la.
 
 ## Instalando no seu stack do Omnivore
 
@@ -157,7 +162,7 @@ apagando os tipos, e os testes usam o runner embutido no próprio Node.
 ```bash
 git clone https://github.com/rcarvalhoxavier/instagram-titles
 cd instagram-titles
-npm ci             # typescript, @types/node e os dois pacotes transitivos deles
+npm ci             # typescript, @types/node, instagram-caption e os dois pacotes transitivos deles
 npm test           # node --test src/*.test.ts
 npm run typecheck  # tsc --noEmit
 ```

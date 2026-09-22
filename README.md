@@ -60,16 +60,20 @@ Read those lines. When you are happy with them, drop `DRY_RUN` and run it again 
 It keeps running on a timer, so stop it with `Ctrl-C` once the first cycle finishes - or add
 `-e MAX_PER_CYCLE=3` to touch only a few items the first time and check the result by hand.
 
-If you would rather not use Docker, and you have Node.js 24 or later, the tool has no runtime
-dependencies at all:
+If you would rather not use Docker, and you have Node.js 24 or later:
 
 ```bash
 git clone https://github.com/rcarvalhoxavier/instagram-titles
 cd instagram-titles
+npm ci --omit=dev
 OMNIVORE_API_URL=https://your-omnivore.example/api/graphql \
 OMNIVORE_API_KEY="$(cat ~/.config/instagram-titles.key)" \
 DRY_RUN=true npm start
 ```
+
+It has one runtime dependency,
+[instagram-caption](https://github.com/rcarvalhoxavier/instagram-caption), which is the part that
+talks to Instagram. It was extracted from this tool so that other link savers can use it too.
 
 ## Installing it into your Omnivore stack
 
@@ -156,7 +160,7 @@ types, and the tests use the runner built into Node.
 ```bash
 git clone https://github.com/rcarvalhoxavier/instagram-titles
 cd instagram-titles
-npm ci             # typescript, @types/node, and their two transitive packages
+npm ci             # typescript, @types/node, instagram-caption, and their two transitive packages
 npm test           # node --test src/*.test.ts
 npm run typecheck  # tsc --noEmit
 ```
