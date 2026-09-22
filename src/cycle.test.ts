@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fromEnv } from "./config.ts";
-import { breakerTripped, runCycle, type CycleStats } from "./cycle.ts";
+import { breakerTripped, runCycle, toParseResult, type CycleStats } from "./cycle.ts";
 import type { Item, Library, SearchPage } from "./omnivore.ts";
 
 const BASE = { OMNIVORE_API_URL: "https://keep.example/api/graphql", OMNIVORE_API_KEY: "k" };
@@ -138,3 +138,27 @@ test("a gone item is labelled end to end through runCycle", async () => {
   assert.deepEqual(library.updates, [], "a gone item must never be retitled");
   assert.deepEqual(library.labelCalls, ["vanished"]);
 });
+
+test("a fetch failure still counts as unknown, so the breaker keeps its sensitivity", () => {
+  // unknownRatioLimit was calibrated against what unknown means today, which
+  // includes transport failures. Letting unavailable become its own bucket
+  // would quietly make the breaker less sensitive than the operator configured.
+  const result = toParseResult({ kind: "unavailable", reason: "HTTP 503", retryable: true, status: 503 });
+  assert.equal(result.kind, "unknown");
+  assert.match(result.reason, /503/, "the reason must survive, or the log lies about why");
+});
+
+test("a non-Instagram url counts as unknown too, and says so", () => {
+  const result = toParseResult({ kind: "not-instagram" });
+  assert.equal(result.kind, "unknown");
+});
+
+for (const outcome of [
+  { kind: "found", author: "a", caption: "c" },
+  { kind: "gone" },
+  { kind: "unknown", reason: "why" },
+] as const) {
+  test(`${outcome.kind} passes through unchanged`, () => {
+    assert.deepEqual(toParseResult(outcome), outcome);
+  });
+}

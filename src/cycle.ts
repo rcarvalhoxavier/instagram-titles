@@ -1,9 +1,36 @@
+import { resolve, type Fetcher, type Outcome, type ParseResult } from "instagram-caption";
 import type { Config } from "./config.ts";
-import { extractShortcode, fetchEmbed, type Fetcher } from "./fetcher.ts";
 import type { Item, Library } from "./omnivore.ts";
-import { classify, type Result } from "./resolver.ts";
 import { findCandidates } from "./selector.ts";
 import { applyFound, applyGone, type Logger } from "./writer.ts";
+
+// Keep in sync with package.json. This is what Instagram sees: the tool doing
+// the work, not the library it borrows. Naming the library here would make
+// every installation of every tool that uses it look like the same client.
+const USER_AGENT = "instagram-titles/0.1.0 (+https://github.com/rcarvalhoxavier/instagram-titles)";
+
+/**
+ * Collapses the library's five outcomes back into the three this tool acts on.
+ *
+ * unavailable and not-instagram become unknown ON PURPOSE: unknownRatioLimit
+ * was calibrated against what unknown means here, which has always included
+ * transport failures. Giving them their own bucket would change the breaker's
+ * sensitivity without anyone changing a setting.
+ */
+export function toParseResult(outcome: Outcome): ParseResult {
+  switch (outcome.kind) {
+    case "found":
+    case "gone":
+    case "unknown":
+      return outcome;
+    case "unavailable":
+      return { kind: "unknown", reason: `could not reach the embed endpoint: ${outcome.reason}` };
+    case "not-instagram":
+      // findCandidates rejects items without a shortcode, so this is
+      // unreachable in practice. It exists so the switch is exhaustive.
+      return { kind: "unknown", reason: "not an Instagram post URL" };
+  }
+}
 
 export const PAUSE_BETWEEN_FETCHES_MS = 1500;
 
@@ -54,7 +81,7 @@ export async function runCycle(
   const candidates = await findCandidates(library, config);
   log(`cycle start: ${candidates.length} candidate(s)`);
 
-  const decisions: Array<{ item: Item; result: Result }> = [];
+  const decisions: Array<{ item: Item; result: ParseResult }> = [];
   let found = 0, gone = 0, unknown = 0;
 
   for (const [index, item] of candidates.entries()) {
@@ -63,19 +90,15 @@ export async function runCycle(
     // error we did not anticipate -- would otherwise abort the loop, skip every
     // remaining item, and come back to abort the next cycle in the same place,
     // because the item is never retitled and so is selected again.
-    let result: Result;
+    let result: ParseResult;
     try {
-      // findCandidates rejects items without a shortcode, so this cannot be
-      // null in practice; the check exists to satisfy the type, not to handle
-      // a case, which is why it shares the "could not reach" reason below.
-      const shortcode = extractShortcode(item.url);
-      const document = shortcode === null ? null
-        : await fetchEmbed(shortcode, { retries: config.fetchRetries, fetchImpl, sleep, log });
-
-      // A transport failure is indefinite, so it is Unknown by construction.
-      result = document === null
-        ? { kind: "unknown", reason: "could not reach the embed endpoint" }
-        : classify(document);
+      const outcome = await resolve(item.url, {
+        retries: config.fetchRetries,
+        fetchImpl,
+        sleep,
+        userAgent: USER_AGENT,
+      });
+      result = toParseResult(outcome);
     } catch (error) {
       errorLog(`resolving ${item.id} threw: ${error instanceof Error ? error.message : String(error)}`);
       result = { kind: "unknown", reason: "threw while resolving" };
