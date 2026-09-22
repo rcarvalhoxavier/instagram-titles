@@ -1,6 +1,6 @@
-import { resolve, type Fetcher, type Outcome, type ParseResult } from "instagram-caption";
+import { resolve, type Outcome, type ParseResult } from "instagram-caption";
 import type { Config } from "./config.ts";
-import type { Item, Library } from "./omnivore.ts";
+import type { Fetcher, Item, Library } from "./omnivore.ts";
 import { findCandidates } from "./selector.ts";
 import { applyFound, applyGone, type Logger } from "./writer.ts";
 
@@ -100,8 +100,9 @@ export async function runCycle(
       });
       result = toParseResult(outcome);
     } catch (error) {
-      errorLog(`resolving ${item.id} threw: ${error instanceof Error ? error.message : String(error)}`);
-      result = { kind: "unknown", reason: "threw while resolving" };
+      const message = error instanceof Error ? error.message : String(error);
+      errorLog(`resolving ${item.id} threw: ${message}`);
+      result = { kind: "unknown", reason: `threw while resolving: ${message}` };
     }
 
     if (result.kind === "found") found++;

@@ -302,7 +302,10 @@ the signature of a real user-agent parser rather than a substring blocklist.
 That reads as a rendering decision rather than an anti-bot one: there is no point sending a
 JavaScript shell to a client that will not run it. It is also why this tool's identifier is safe
 structurally rather than by luck - it carries no versioned browser-family token. If you edit it,
-that is the one thing to avoid.
+that is the one thing to avoid - and it is no longer only advice: instagram-caption, the package
+that carries this identifier to Instagram, refuses outright with an error if it contains a
+versioned browser-family token, rather than letting you silently turn every request into
+`unknown`.
 
 Measured across 17 variants against one post, from one IP, with one TLS client. The contrast
 within the batch was clean and a control was re-run afterwards to rule out drift, but none of that

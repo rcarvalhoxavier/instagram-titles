@@ -308,7 +308,10 @@ lista de substrings.
 Isso se lê como decisão de renderização, não como decisão anti-bot: não adianta mandar um shell de
 JavaScript para um cliente que não vai executá-lo. É também por isso que o identificador desta
 ferramenta é seguro por razão estrutural, e não por sorte — ele não carrega token de família de
-navegador com versão. Se você for editá-lo, é a única coisa a evitar.
+navegador com versão. Se você for editá-lo, é a única coisa a evitar — e isso deixou de ser só
+conselho: o instagram-caption, o pacote que leva esse identificador até o Instagram, recusa de
+cara, com erro, se ele contiver um token de família de navegador com versão, em vez de deixar
+você transformar toda requisição em `unknown` em silêncio.
 
 Medido em 17 variantes contra um post, de um IP, com um cliente TLS. O contraste dentro da bateria
 foi limpo e um controle foi refeito ao final para descartar deriva, mas nada disso prova que o
