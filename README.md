@@ -174,10 +174,10 @@ npm test           # node --test src/*.test.ts
 npm run typecheck  # tsc --noEmit
 ```
 
-The test suite never touches the network. `fixtures/` holds real embed pages captured from
-Instagram - one for each response shape the resolver has to handle - plus one hand-written file
-standing in for a blocked response. That one is labelled synthetic in its own comment, because no
-real block has ever been observed to capture.
+The test suite never touches the network. The fixture pages captured from Instagram, and the HTML
+parsing that reads them, now live in the
+[instagram-caption](https://github.com/rcarvalhoxavier/instagram-caption) package this tool
+depends on.
 
 Two rules CI enforces, worth knowing before you send a patch:
 
@@ -199,15 +199,13 @@ OMNIVORE_API_URL=... OMNIVORE_API_KEY=... node scripts/probe-api.ts
 
 ## How the code is laid out
 
-Nine small modules, each with one job, arranged as a pipeline. If something is broken, this tells
-you which file to open.
+Seven small modules, each with one job, arranged as a pipeline. If something is broken, this
+tells you which file to open.
 
 | Module | Job |
 | --- | --- |
 | `config.ts` | Reads and validates every setting. Owns every default; nothing else has one. |
 | `selector.ts` | Decides which library items may be touched. The safety boundary. |
-| `fetcher.ts` | The only module that talks to Instagram. URL to HTML, with retries. |
-| `resolver.ts` | Pure. HTML to `found` / `gone` / `unknown`. No network, no clock. |
 | `title.ts` | Pure. Author plus caption to the title string. |
 | `writer.ts` | The only module that writes to your library. |
 | `omnivore.ts` | The GraphQL client, and the `Library` contract the others depend on. |
@@ -215,8 +213,11 @@ you which file to open.
 | `main.ts` | Configuration, the loop, and the timer. 40 lines. |
 
 A change almost always lands in exactly one of them. **Instagram changed its HTML** is the failure
-this tool exists to survive, and it lands in `resolver.ts` - start there, and read
-`resolver.test.ts` alongside it, since the fixtures show what the two page shapes look like.
+this tool exists to survive, and it no longer lands here at all: fetching and parsing Instagram's
+HTML now live in the
+[instagram-caption](https://github.com/rcarvalhoxavier/instagram-caption) package. Start there,
+and read `resolver.test.ts` and its fixtures in that repository, since they show what the two
+page shapes look like.
 
 ## Configuration
 
