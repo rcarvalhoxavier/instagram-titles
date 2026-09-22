@@ -9,6 +9,15 @@ to an Instagram page returns no `og:title` and no `og:description` for Omnivore 
 author and caption from Instagram's public embed endpoint, and rewrites the title and byline so
 the item actually tells you what it is.
 
+Since resolution moved to the [instagram-caption](https://github.com/rcarvalhoxavier/instagram-caption)
+package, two caption defects on the HTML response variant are fixed: Instagram's own "View all N
+comments" link no longer leaks into the caption, and a `<br>` no longer glues two lines together
+without a space. Titles resolved from an HTML-variant post now differ from - and are more correct
+than - what older versions of this tool wrote. Because only items titled exactly `Instagram` are
+re-selected by default, an item you already have with a polluted title will not be repaired on
+its own; search your library for it and clear the title by hand, or widen
+`GENERIC_TITLE_PATTERN` for one run.
+
 ## What it does not do
 
 It does not download media, does not archive content, and does not use any Instagram

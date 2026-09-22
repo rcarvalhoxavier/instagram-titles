@@ -9,6 +9,16 @@ Omnivore ler — só `og:site_name`, que é sempre a palavra "Instagram". Esta f
 esses itens, busca o autor e a legenda no endpoint de embed público do Instagram, e reescreve o
 título e o autor para que o item diga o que ele realmente é.
 
+Desde que a resolução passou para o pacote
+[instagram-caption](https://github.com/rcarvalhoxavier/instagram-caption), dois defeitos de
+legenda na variante HTML foram corrigidos: o link "View all N comments" do próprio Instagram não
+vaza mais para a legenda, e um `<br>` não gruda mais duas linhas sem um espaço entre elas. Títulos
+resolvidos a partir de um post na variante HTML agora ficam diferentes — e mais corretos — do que
+versões antigas desta ferramenta escreviam. Como só itens com título exatamente `Instagram` são
+reselecionados por padrão, um item que você já tem com um título poluído não vai se corrigir
+sozinho; procure por ele na sua biblioteca e apague o título à mão, ou alargue o
+`GENERIC_TITLE_PATTERN` por uma rodada.
+
 ## O que ela não faz
 
 Não baixa mídia, não arquiva conteúdo e não usa credencial nenhuma do Instagram — ela lê o
