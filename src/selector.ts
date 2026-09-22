@@ -1,5 +1,5 @@
 import type { Config } from "./config.ts";
-import { extractShortcode } from "./fetcher.ts";
+import { extractShortcode } from "instagram-caption";
 import type { Item, Library } from "./omnivore.ts";
 
 // Deliberately broad. This is a text match, not a host filter, so every

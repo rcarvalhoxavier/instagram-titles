@@ -1,4 +1,4 @@
-import type { Fetcher } from "./fetcher.ts";
+import type { Fetcher } from "instagram-caption";
 
 // Its own constant rather than the fetcher's: the Omnivore client has no
 // business depending on the Instagram fetcher for a number.
