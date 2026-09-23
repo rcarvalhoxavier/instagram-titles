@@ -7,7 +7,7 @@ import { applyFound, applyGone, type Logger } from "./writer.ts";
 // Keep in sync with package.json. This is what Instagram sees: the tool doing
 // the work, not the library it borrows. Naming the library here would make
 // every installation of every tool that uses it look like the same client.
-const USER_AGENT = "instagram-titles/0.1.0 (+https://github.com/rcarvalhoxavier/instagram-titles)";
+const USER_AGENT = "instagram-titles/0.2.0 (+https://github.com/rcarvalhoxavier/instagram-titles)";
 
 /**
  * Collapses the library's five outcomes back into the three this tool acts on.
