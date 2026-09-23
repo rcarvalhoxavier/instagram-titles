@@ -1,4 +1,7 @@
-import type { Fetcher } from "./fetcher.ts";
+// Its own type rather than the package's: the Omnivore client has no
+// business depending on the Instagram fetcher for a function signature that
+// is simply typeof fetch. Same argument as the constant just below.
+export type Fetcher = typeof fetch;
 
 // Its own constant rather than the fetcher's: the Omnivore client has no
 // business depending on the Instagram fetcher for a number.

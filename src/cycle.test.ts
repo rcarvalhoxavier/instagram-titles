@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fromEnv } from "./config.ts";
-import { breakerTripped, runCycle, type CycleStats } from "./cycle.ts";
+import { breakerTripped, runCycle, toParseResult, type CycleStats } from "./cycle.ts";
 import type { Item, Library, SearchPage } from "./omnivore.ts";
 
 const BASE = { OMNIVORE_API_URL: "https://keep.example/api/graphql", OMNIVORE_API_KEY: "k" };
@@ -31,15 +31,25 @@ test("breaker threshold is configurable", () => {
   assert.equal(breakerTripped(stats(3, 0, 7), fromEnv({ ...BASE, UNKNOWN_RATIO_LIMIT: "0.9" })), false);
 });
 
+interface Update {
+  readonly id: string;
+  readonly title: string;
+  readonly byline: string;
+}
+
 class FakeLibrary implements Library {
   readonly updates: string[] = [];
+  readonly writes: Update[] = [];
   readonly labelCalls: string[] = [];
   readonly #items: Item[];
   // No parameter properties: that is non-erasable TS syntax, which Node's
   // native type stripping rejects and erasableSyntaxOnly forbids.
   constructor(items: Item[]) { this.#items = items; }
   async search(): Promise<SearchPage> { return { items: this.#items, next: null }; }
-  async updatePage(id: string): Promise<void> { this.updates.push(id); }
+  async updatePage(id: string, title: string, byline: string): Promise<void> {
+    this.updates.push(id);
+    this.writes.push({ id, title, byline });
+  }
   async setLabels(id: string): Promise<void> { this.labelCalls.push(id); }
 }
 
@@ -124,6 +134,36 @@ test("an item whose fetch throws becomes unknown without ending the cycle", asyn
   assert.deepEqual(library.updates, ["fine"]);
 });
 
+// This is the only test in this repo that runs real Instagram HTML through
+// runCycle to the exact title and byline it writes. instagram-caption is
+// pinned to ^0.1.0, so a 0.1.1 is free to change caption extraction again --
+// permitted under 0.x -- and Dependabot will happily open a PR bumping it.
+// Everything else in this suite fakes the library's response with a caption
+// that was already clean, so it cannot see a regression in what the library
+// does to a real HTML-variant post. This test pins the caption fix Fix 1
+// documented: the "View all N comments" chrome must not appear in the
+// title, and a <br> must become a space rather than gluing two lines
+// together. If a future version of the package regressed either defect,
+// this is what would fail.
+test("an HTML-variant post resolves to the exact title and byline instagram-caption promises", async () => {
+  const HTML_VARIANT = `<span class="UsernameText">captionfix</span>` +
+    `<div class="Caption">hello<br>world<div class="CaptionComments">` +
+    `<a href="#">View all 41 comments</a></div></div>`;
+  const items: Item[] = [
+    { id: "html-variant", url: "https://www.instagram.com/p/HTMLV/", title: "Instagram", labels: [] },
+  ];
+  const library = new FakeLibrary(items);
+
+  await runCycle(library, fromEnv(BASE), {
+    fetchImpl: async () => new Response(HTML_VARIANT, { status: 200 }),
+    sleep: async () => {},
+  });
+
+  assert.deepEqual(library.writes, [
+    { id: "html-variant", title: "hello world", byline: "captionfix" },
+  ]);
+});
+
 test("a gone item is labelled end to end through runCycle", async () => {
   const items: Item[] = [
     { id: "vanished", url: "https://www.instagram.com/p/GONE/", title: "Instagram", labels: ["keep"] },
@@ -138,3 +178,27 @@ test("a gone item is labelled end to end through runCycle", async () => {
   assert.deepEqual(library.updates, [], "a gone item must never be retitled");
   assert.deepEqual(library.labelCalls, ["vanished"]);
 });
+
+test("a fetch failure still counts as unknown, so the breaker keeps its sensitivity", () => {
+  // unknownRatioLimit was calibrated against what unknown means today, which
+  // includes transport failures. Letting unavailable become its own bucket
+  // would quietly make the breaker less sensitive than the operator configured.
+  const result = toParseResult({ kind: "unavailable", reason: "HTTP 503", retryable: true, status: 503 });
+  assert.equal(result.kind, "unknown");
+  assert.match(result.reason, /503/, "the reason must survive, or the log lies about why");
+});
+
+test("a non-Instagram url counts as unknown too, and says so", () => {
+  const result = toParseResult({ kind: "not-instagram" });
+  assert.equal(result.kind, "unknown");
+});
+
+for (const outcome of [
+  { kind: "found", author: "a", caption: "c" },
+  { kind: "gone" },
+  { kind: "unknown", reason: "why" },
+] as const) {
+  test(`${outcome.kind} passes through unchanged`, () => {
+    assert.deepEqual(toParseResult(outcome), outcome);
+  });
+}

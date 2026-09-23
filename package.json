@@ -5,11 +5,19 @@
   "license": "MIT",
   "private": false,
   "type": "module",
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "start": "node src/main.ts",
     "test": "node --test src/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
-  "devDependencies": { "typescript": "^7.0.0", "@types/node": "^26.6.1" }
+  "devDependencies": {
+    "@types/node": "^26.6.1",
+    "typescript": "^7.0.0"
+  },
+  "dependencies": {
+    "instagram-caption": "^0.1.0"
+  }
 }

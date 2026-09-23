@@ -9,6 +9,15 @@ to an Instagram page returns no `og:title` and no `og:description` for Omnivore 
 author and caption from Instagram's public embed endpoint, and rewrites the title and byline so
 the item actually tells you what it is.
 
+Since resolution moved to the [instagram-caption](https://github.com/rcarvalhoxavier/instagram-caption)
+package, two caption defects on the HTML response variant are fixed: Instagram's own "View all N
+comments" link no longer leaks into the caption, and a `<br>` no longer glues two lines together
+without a space. Titles resolved from an HTML-variant post now differ from - and are more correct
+than - what older versions of this tool wrote. Because only items titled exactly `Instagram` are
+re-selected by default, an item you already have with a polluted title will not be repaired on
+its own; search your library for it and clear the title by hand, or widen
+`GENERIC_TITLE_PATTERN` for one run.
+
 ## What it does not do
 
 It does not download media, does not archive content, and does not use any Instagram
@@ -60,16 +69,20 @@ Read those lines. When you are happy with them, drop `DRY_RUN` and run it again 
 It keeps running on a timer, so stop it with `Ctrl-C` once the first cycle finishes - or add
 `-e MAX_PER_CYCLE=3` to touch only a few items the first time and check the result by hand.
 
-If you would rather not use Docker, and you have Node.js 24 or later, the tool has no runtime
-dependencies at all:
+If you would rather not use Docker, and you have Node.js 24 or later:
 
 ```bash
 git clone https://github.com/rcarvalhoxavier/instagram-titles
 cd instagram-titles
+npm ci --omit=dev
 OMNIVORE_API_URL=https://your-omnivore.example/api/graphql \
 OMNIVORE_API_KEY="$(cat ~/.config/instagram-titles.key)" \
 DRY_RUN=true npm start
 ```
+
+It has one runtime dependency,
+[instagram-caption](https://github.com/rcarvalhoxavier/instagram-caption), which is the part that
+talks to Instagram. It was extracted from this tool so that other link savers can use it too.
 
 ## Installing it into your Omnivore stack
 
@@ -156,15 +169,15 @@ types, and the tests use the runner built into Node.
 ```bash
 git clone https://github.com/rcarvalhoxavier/instagram-titles
 cd instagram-titles
-npm ci             # typescript, @types/node, and their two transitive packages
+npm ci             # typescript, @types/node, instagram-caption, and their two transitive packages
 npm test           # node --test src/*.test.ts
 npm run typecheck  # tsc --noEmit
 ```
 
-The test suite never touches the network. `fixtures/` holds real embed pages captured from
-Instagram - one for each response shape the resolver has to handle - plus one hand-written file
-standing in for a blocked response. That one is labelled synthetic in its own comment, because no
-real block has ever been observed to capture.
+The test suite never touches the network. The fixture pages captured from Instagram, and the HTML
+parsing that reads them, now live in the
+[instagram-caption](https://github.com/rcarvalhoxavier/instagram-caption) package this tool
+depends on.
 
 Two rules CI enforces, worth knowing before you send a patch:
 
@@ -186,15 +199,13 @@ OMNIVORE_API_URL=... OMNIVORE_API_KEY=... node scripts/probe-api.ts
 
 ## How the code is laid out
 
-Nine small modules, each with one job, arranged as a pipeline. If something is broken, this tells
-you which file to open.
+Seven small modules, each with one job, arranged as a pipeline. If something is broken, this
+tells you which file to open.
 
 | Module | Job |
 | --- | --- |
 | `config.ts` | Reads and validates every setting. Owns every default; nothing else has one. |
 | `selector.ts` | Decides which library items may be touched. The safety boundary. |
-| `fetcher.ts` | The only module that talks to Instagram. URL to HTML, with retries. |
-| `resolver.ts` | Pure. HTML to `found` / `gone` / `unknown`. No network, no clock. |
 | `title.ts` | Pure. Author plus caption to the title string. |
 | `writer.ts` | The only module that writes to your library. |
 | `omnivore.ts` | The GraphQL client, and the `Library` contract the others depend on. |
@@ -202,8 +213,11 @@ you which file to open.
 | `main.ts` | Configuration, the loop, and the timer. 40 lines. |
 
 A change almost always lands in exactly one of them. **Instagram changed its HTML** is the failure
-this tool exists to survive, and it lands in `resolver.ts` - start there, and read
-`resolver.test.ts` alongside it, since the fixtures show what the two page shapes look like.
+this tool exists to survive, and it no longer lands here at all: fetching and parsing Instagram's
+HTML now live in the
+[instagram-caption](https://github.com/rcarvalhoxavier/instagram-caption) package. Start there,
+and read `resolver.test.ts` and its fixtures in that repository, since they show what the two
+page shapes look like.
 
 ## Configuration
 
@@ -288,7 +302,10 @@ the signature of a real user-agent parser rather than a substring blocklist.
 That reads as a rendering decision rather than an anti-bot one: there is no point sending a
 JavaScript shell to a client that will not run it. It is also why this tool's identifier is safe
 structurally rather than by luck - it carries no versioned browser-family token. If you edit it,
-that is the one thing to avoid.
+that is the one thing to avoid - and it is no longer only advice: instagram-caption, the package
+that carries this identifier to Instagram, refuses outright with an error if it contains a
+versioned browser-family token, rather than letting you silently turn every request into
+`unknown`.
 
 Measured across 17 variants against one post, from one IP, with one TLS client. The contrast
 within the batch was clean and a control was re-run afterwards to rule out drift, but none of that
